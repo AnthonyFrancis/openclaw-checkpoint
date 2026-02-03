@@ -256,31 +256,43 @@ READMEEOF
     echo ""
     echo "☁️  Step 4: Testing connection..."
     
+    # Avoid pushing the checkpoint skill as embedded repo (fixes existing inits)
+    if ! grep -q '^skills/openclaw-checkpoint$' "$WORKSPACE_DIR/.gitignore" 2>/dev/null; then
+        echo "skills/openclaw-checkpoint" >> "$WORKSPACE_DIR/.gitignore"
+    fi
+    git -C "$WORKSPACE_DIR" rm -r --cached skills/openclaw-checkpoint 2>/dev/null || true
+    
     # Stage ALL files and commit (ensure full backup, not just .gitignore)
+    cd "$WORKSPACE_DIR"
     git add -A
     if ! git diff --cached --quiet 2>/dev/null; then
         git commit -m "Initial checkpoint: Full workspace backup" --quiet
     fi
     
+    BRANCH=$(git branch --show-current)
+    
     # Push to remote
     if [ "$AUTH_METHOD" = "1" ]; then
         # SSH push
-        if git push -u origin main --quiet 2>/dev/null || git push -u origin master --quiet 2>/dev/null; then
-            echo "   ✅ Successfully pushed to GitHub"
-        else
-            echo "   ❌ Push failed. Please check your SSH key is added to GitHub."
-            echo "   You can retry with: checkpoint-auth"
+        if ! PUSH_ERR=$(git push -u origin "$BRANCH" 2>&1); then
+            echo "   ❌ Push failed:"
+            echo "$PUSH_ERR" | sed 's/^/   /'
+            echo ""
+            echo "   Common fixes:"
+            echo "   • Ensure the repo exists: https://github.com/$GITHUB_USER/$REPO_NAME"
+            echo "   • Ensure your SSH key has push access (Settings → SSH keys)"
+            echo "   • Retry with: checkpoint-auth"
             exit 1
         fi
+        echo "   ✅ Successfully pushed to GitHub"
     else
         # HTTPS push with token
-        if git push "https://$GITHUB_USER:$GITHUB_TOKEN@github.com/$GITHUB_USER/$REPO_NAME.git" main --quiet 2>/dev/null || \
-           git push "https://$GITHUB_USER:$GITHUB_TOKEN@github.com/$GITHUB_USER/$REPO_NAME.git" master --quiet 2>/dev/null; then
-            echo "   ✅ Successfully pushed to GitHub"
-        else
-            echo "   ❌ Push failed. Please check your token and repository."
+        if ! PUSH_ERR=$(git push "https://$GITHUB_USER:$GITHUB_TOKEN@github.com/$GITHUB_USER/$REPO_NAME.git" "$BRANCH" 2>&1); then
+            echo "   ❌ Push failed:"
+            echo "$PUSH_ERR" | sed 's/^/   /'
             exit 1
         fi
+        echo "   ✅ Successfully pushed to GitHub"
         # Clear token from memory
         unset GITHUB_TOKEN
     fi
@@ -297,12 +309,13 @@ else
         git commit -m "checkpoint: Full workspace backup" --quiet
     fi
     
-    # Try to push
-    if git push origin main --quiet 2>/dev/null || git push origin master --quiet 2>/dev/null; then
-        echo "   ✅ Connection verified"
-    else
-        echo "   ⚠️  Could not push to remote. You may need to re-authenticate."
+    BRANCH=$(git branch --show-current)
+    if ! PUSH_ERR=$(git push origin "$BRANCH" 2>&1); then
+        echo "   ⚠️  Could not push to remote:"
+        echo "$PUSH_ERR" | sed 's/^/   /'
         echo "   Run: checkpoint-auth"
+    else
+        echo "   ✅ Connection verified"
     fi
 fi
 

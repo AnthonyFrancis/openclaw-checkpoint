@@ -67,7 +67,7 @@ Thumbs.db
 .idea/
 
 # Nested git repos (add any skill folders that are their own git repos here)
-# Example: skills/some-cloned-skill/
+skills/openclaw-checkpoint
 EOF
 
 # Create initial commit with ALL files
