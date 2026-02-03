@@ -62,6 +62,7 @@ The interactive wizard will:
 | `checkpoint-setup` | Interactive first-time setup wizard |
 | `checkpoint` | Backup now |
 | `checkpoint-resume` | Restore from backup |
+| `checkpoint-auth` | Fix authentication issues |
 | `checkpoint-status` | Check backup health |
 | `checkpoint-schedule` | Configure auto-backup frequency |
 | `checkpoint-stop` | Stop automatic backups |
@@ -147,7 +148,7 @@ git remote set-url origin git@github.com:USER/REPO.git
 <details>
 <summary><strong>"Permission denied (publickey)"</strong></summary>
 
-Your SSH key isn't added to GitHub. Run `checkpoint-setup` and follow the SSH setup.
+Your SSH key isn't added to GitHub. Run `checkpoint-auth` to set up SSH authentication.
 </details>
 
 ## About

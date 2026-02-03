@@ -214,17 +214,23 @@ esac
 echo ""
 echo "🧪 Testing authentication..."
 
-# Test with a simple fetch
+# Only verify against git remote if workspace has a repo with origin
 cd "$WORKSPACE_DIR" 2>/dev/null || {
-    echo "❌ Workspace not found"
+    echo "❌ Workspace not found: $WORKSPACE_DIR"
     exit 1
 }
+
+if ! git rev-parse --git-dir >/dev/null 2>&1 || ! git remote get-url origin >/dev/null 2>&1; then
+    echo "✅ Authentication successful!"
+    echo "   (No repo/remote yet — run checkpoint-setup or checkpoint-init to create one)"
+    echo "   You can now use: checkpoint, checkpoint-resume, etc."
+    exit 0
+fi
 
 if git fetch origin --dry-run 2>/dev/null || git ls-remote origin HEAD >/dev/null 2>&1; then
     echo "✅ Authentication successful!"
     echo "   You can now use: checkpoint, checkpoint-resume, etc."
 else
-    echo "⚠️  Could not verify authentication"
-    echo "   You may need to try again or check your credentials"
-    exit 1
+    echo "⚠️  Could not reach remote (repo may not exist yet or access may be limited)"
+    echo "   Auth with GitHub CLI succeeded. Run checkpoint-setup to create the repo if needed."
 fi

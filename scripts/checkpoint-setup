@@ -278,10 +278,36 @@ READMEEOF
             echo "   ❌ Push failed:"
             echo "$PUSH_ERR" | sed 's/^/   /'
             echo ""
-            echo "   Common fixes:"
-            echo "   • Ensure the repo exists: https://github.com/$GITHUB_USER/$REPO_NAME"
-            echo "   • Ensure your SSH key has push access (Settings → SSH keys)"
-            echo "   • Retry with: checkpoint-auth"
+            
+            # Detect "fetch first" error (remote has commits we don't have)
+            if echo "$PUSH_ERR" | grep -q "fetch first\|non-fast-forward"; then
+                echo "   ┌─────────────────────────────────────────────────────────┐"
+                echo "   │  The remote repository already has commits.             │"
+                echo "   │                                                         │"
+                echo "   │  This usually means the repo was created with a README, │"
+                echo "   │  .gitignore, or license file on GitHub.                 │"
+                echo "   └─────────────────────────────────────────────────────────┘"
+                echo ""
+                echo "   Choose how to fix this:"
+                echo ""
+                echo "   Option A: Overwrite remote with your local checkpoint (recommended for new repos)"
+                echo "      cd ~/.openclaw/workspace"
+                echo "      git push origin $BRANCH --force"
+                echo ""
+                echo "   Option B: Merge remote content into your checkpoint"
+                echo "      cd ~/.openclaw/workspace"
+                echo "      git pull origin $BRANCH --allow-unrelated-histories"
+                echo "      git push origin $BRANCH"
+                echo ""
+                echo "   Option C: Start fresh - delete the GitHub repo and create a new EMPTY one"
+                echo "      (Do NOT check 'Add a README file' or any other options)"
+                echo "      Then run: checkpoint-setup"
+            else
+                echo "   Common fixes:"
+                echo "   • Ensure the repo exists: https://github.com/$GITHUB_USER/$REPO_NAME"
+                echo "   • Ensure your SSH key has push access (Settings → SSH keys)"
+                echo "   • Retry with: checkpoint-auth"
+            fi
             exit 1
         fi
         echo "   ✅ Successfully pushed to GitHub"
@@ -290,6 +316,32 @@ READMEEOF
         if ! PUSH_ERR=$(git push "https://$GITHUB_USER:$GITHUB_TOKEN@github.com/$GITHUB_USER/$REPO_NAME.git" "$BRANCH" 2>&1); then
             echo "   ❌ Push failed:"
             echo "$PUSH_ERR" | sed 's/^/   /'
+            echo ""
+            
+            # Detect "fetch first" error (remote has commits we don't have)
+            if echo "$PUSH_ERR" | grep -q "fetch first\|non-fast-forward"; then
+                echo "   ┌─────────────────────────────────────────────────────────┐"
+                echo "   │  The remote repository already has commits.             │"
+                echo "   │                                                         │"
+                echo "   │  This usually means the repo was created with a README, │"
+                echo "   │  .gitignore, or license file on GitHub.                 │"
+                echo "   └─────────────────────────────────────────────────────────┘"
+                echo ""
+                echo "   Choose how to fix this:"
+                echo ""
+                echo "   Option A: Overwrite remote with your local checkpoint (recommended for new repos)"
+                echo "      cd ~/.openclaw/workspace"
+                echo "      git push origin $BRANCH --force"
+                echo ""
+                echo "   Option B: Merge remote content into your checkpoint"
+                echo "      cd ~/.openclaw/workspace"
+                echo "      git pull origin $BRANCH --allow-unrelated-histories"
+                echo "      git push origin $BRANCH"
+                echo ""
+                echo "   Option C: Start fresh - delete the GitHub repo and create a new EMPTY one"
+                echo "      (Do NOT check 'Add a README file' or any other options)"
+                echo "      Then run: checkpoint-setup"
+            fi
             exit 1
         fi
         echo "   ✅ Successfully pushed to GitHub"
@@ -313,7 +365,31 @@ else
     if ! PUSH_ERR=$(git push origin "$BRANCH" 2>&1); then
         echo "   ⚠️  Could not push to remote:"
         echo "$PUSH_ERR" | sed 's/^/   /'
-        echo "   Run: checkpoint-auth"
+        echo ""
+        
+        # Detect "fetch first" error (remote has commits we don't have)
+        if echo "$PUSH_ERR" | grep -q "fetch first\|non-fast-forward"; then
+            echo "   ┌─────────────────────────────────────────────────────────┐"
+            echo "   │  The remote repository has commits you don't have.     │"
+            echo "   │                                                         │"
+            echo "   │  This can happen if:                                    │"
+            echo "   │  • Another machine pushed changes                       │"
+            echo "   │  • The repo was initialized with README/.gitignore      │"
+            echo "   └─────────────────────────────────────────────────────────┘"
+            echo ""
+            echo "   Choose how to fix this:"
+            echo ""
+            echo "   Option A: Pull remote changes first (if you want to keep them)"
+            echo "      cd ~/.openclaw/workspace"
+            echo "      git pull origin $BRANCH --allow-unrelated-histories"
+            echo "      git push origin $BRANCH"
+            echo ""
+            echo "   Option B: Overwrite remote with your local state"
+            echo "      cd ~/.openclaw/workspace"
+            echo "      git push origin $BRANCH --force"
+        else
+            echo "   Run: checkpoint-auth"
+        fi
     else
         echo "   ✅ Connection verified"
     fi
@@ -371,11 +447,13 @@ echo "=============================="
 echo "✅ OpenClaw Checkpoint is ready!"
 echo ""
 echo "Quick commands:"
-echo "   checkpoint          - Backup now"
-echo "   checkpoint-resume   - Restore on new machine"
-echo "   checkpoint-status   - Check backup health"
-echo "   checkpoint-schedule - Change backup frequency"
-echo "   checkpoint-stop     - Stop automatic backups"
+echo "   checkpoint                  - Backup now"
+echo "   checkpoint-resume           - Restore on new machine"
+echo "   checkpoint-auth             - Fix authentication issues"
+echo "   checkpoint-status           - Check backup health"
+echo "   checkpoint-schedule hourly  - Set auto-backup (or 15min, 30min, daily, etc.)"
+echo "   checkpoint-schedule disable - Turn off automatic backups"
+echo "   checkpoint-stop             - Stop automatic backups"
 echo ""
 echo "Your state is now protected. If this machine dies,"
 echo "you can restore everything on a new machine with:"
