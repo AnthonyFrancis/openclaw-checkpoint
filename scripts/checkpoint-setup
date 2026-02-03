@@ -446,16 +446,18 @@ echo ""
 echo "=============================="
 echo "✅ OpenClaw Checkpoint is ready!"
 echo ""
-echo "Quick commands:"
-echo "   checkpoint                  - Backup now"
-echo "   checkpoint-resume           - Restore on new machine"
-echo "   checkpoint-auth             - Fix authentication issues"
-echo "   checkpoint-status           - Check backup health"
-echo "   checkpoint-schedule hourly  - Set auto-backup (or 15min, 30min, daily, etc.)"
-echo "   checkpoint-schedule disable - Turn off automatic backups"
-echo "   checkpoint-stop             - Stop automatic backups"
-echo ""
-echo "Your state is now protected. If this machine dies,"
-echo "you can restore everything on a new machine with:"
-echo "   git clone git@github.com:$GITHUB_USER/$REPO_NAME.git ~/.openclaw/workspace"
+CLONE_URL=""
+if [ -n "${GITHUB_USER:-}" ] && [ -n "${REPO_NAME:-}" ]; then
+    CLONE_URL="git@github.com:$GITHUB_USER/$REPO_NAME.git"
+else
+    CLONE_URL=$(git -C "$WORKSPACE_DIR" remote get-url origin 2>/dev/null) || true
+fi
+if [ -n "$CLONE_URL" ]; then
+    echo "Your state is now protected. If this machine dies,"
+    echo "you can restore everything on a new machine with:"
+    echo "   git clone $CLONE_URL ~/.openclaw/workspace"
+else
+    echo "Your state is now protected. To restore on a new machine,"
+    echo "clone your backup repo to ~/.openclaw/workspace"
+fi
 echo ""
