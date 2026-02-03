@@ -1,46 +1,47 @@
 #!/bin/bash
 # install-openclaw-checkpoint.sh - One-liner install for openclaw-checkpoint skill
+# Run with: curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
 
 set -e
 
 SKILL_NAME="openclaw-checkpoint"
-SKILL_URL="https://raw.githubusercontent.com/openclaw/openclaw/main/skills/openclaw-checkpoint.skill"
+REPO_URL="https://github.com/AnthonyFrancis/openclaw-checkpoint.git"
 INSTALL_DIR="${HOME}/.openclaw/skills/${SKILL_NAME}"
 TOOLS_DIR="${HOME}/.openclaw/workspace/tools"
 
 echo "🚀 Installing OpenClaw Checkpoint Skill..."
 echo ""
 
-# Create directories
-echo "📁 Creating directories..."
-mkdir -p "${INSTALL_DIR}"
-mkdir -p "${TOOLS_DIR}"
-
-# Download skill
-echo "⬇️  Downloading skill..."
-if command -v curl &> /dev/null; then
-    curl -fsSL "${SKILL_URL}" -o "/tmp/${SKILL_NAME}.skill" || {
-        echo "❌ Failed to download skill"
-        exit 1
-    }
-elif command -v wget &> /dev/null; then
-    wget -q "${SKILL_URL}" -O "/tmp/${SKILL_NAME}.skill" || {
-        echo "❌ Failed to download skill"
-        exit 1
-    }
-else
-    echo "❌ curl or wget required"
+# Check for git
+if ! command -v git &> /dev/null; then
+    echo "❌ git is required but not installed"
     exit 1
 fi
 
-# Extract skill
-echo "📦 Extracting skill..."
-unzip -q -o "/tmp/${SKILL_NAME}.skill" -d "${INSTALL_DIR}"
-rm "/tmp/${SKILL_NAME}.skill"
+# Create directories
+echo "📁 Creating directories..."
+mkdir -p "${HOME}/.openclaw/skills"
+mkdir -p "${TOOLS_DIR}"
+
+# Clone or update skill repo
+echo "⬇️  Downloading skill..."
+if [ -d "${INSTALL_DIR}/.git" ]; then
+    # Already installed, pull updates
+    git -C "${INSTALL_DIR}" pull --quiet || {
+        echo "⚠️  Could not update, using existing version"
+    }
+else
+    # Fresh install
+    rm -rf "${INSTALL_DIR}"
+    git clone --quiet "${REPO_URL}" "${INSTALL_DIR}" || {
+        echo "❌ Failed to download skill"
+        exit 1
+    }
+fi
 
 # Copy scripts to tools directory (for easy PATH access)
 echo "🧰 Installing commands..."
-cp "${INSTALL_DIR}/scripts/"* "${TOOLS_DIR}/"
+cp "${INSTALL_DIR}/scripts/checkpoint"* "${TOOLS_DIR}/"
 chmod +x "${TOOLS_DIR}/"checkpoint*
 
 # Detect shell and add to PATH

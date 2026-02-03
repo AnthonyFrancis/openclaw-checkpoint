@@ -18,24 +18,32 @@ Automatically sync your OpenClaw agent's identity, memory, and configuration to 
 
 ## Quick Start
 
-### Install
+### One-Liner Install (Recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
+```
+
+This will:
+- Download and install the skill
+- Add commands to your PATH automatically
+- Offer to run the setup wizard
+
+### Manual Install
 
 ```bash
 # Clone this repo
-git clone https://github.com/AnthonyFrancis/openclaw-checkpoint.git
+git clone https://github.com/AnthonyFrancis/openclaw-checkpoint.git ~/.openclaw/skills/openclaw-checkpoint
 
 # Copy scripts to your tools directory
 mkdir -p ~/.openclaw/workspace/tools
-cp openclaw-checkpoint/scripts/checkpoint* ~/.openclaw/workspace/tools/
+cp ~/.openclaw/skills/openclaw-checkpoint/scripts/checkpoint* ~/.openclaw/workspace/tools/
 chmod +x ~/.openclaw/workspace/tools/checkpoint*
 
 # Add to PATH (add to ~/.zshrc or ~/.bashrc for persistence)
 export PATH="${HOME}/.openclaw/workspace/tools:${PATH}"
-```
 
-### Setup
-
-```bash
+# Run setup
 checkpoint-setup
 ```
 

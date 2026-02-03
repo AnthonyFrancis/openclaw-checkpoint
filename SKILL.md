@@ -23,24 +23,23 @@ This skill provides disaster recovery for OpenClaw by syncing your workspace to 
 ### Option 1: One-Liner Install (Recommended)
 
 ```bash
-curl -fsSL https://thisweek.is/checkpoint-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
 ```
 
 This will:
 - Download and install the skill
 - Add commands to your PATH automatically
-- Run the interactive setup wizard
+- Offer to run the interactive setup wizard
 
 ### Option 2: Manual Install
 
 ```bash
-# Download skill file
-curl -L -o openclaw-checkpoint.skill https://thisweek.is/openclaw-checkpoint.skill
+# Clone the skill repo
+git clone https://github.com/AnthonyFrancis/openclaw-checkpoint.git ~/.openclaw/skills/openclaw-checkpoint
 
-# Extract and install
-mkdir -p ~/.openclaw/skills ~/.openclaw/workspace/tools
-unzip -o openclaw-checkpoint.skill -d ~/.openclaw/skills/openclaw-checkpoint/
-cp ~/.openclaw/skills/openclaw-checkpoint/scripts/* ~/.openclaw/workspace/tools/
+# Copy scripts to tools directory
+mkdir -p ~/.openclaw/workspace/tools
+cp ~/.openclaw/skills/openclaw-checkpoint/scripts/checkpoint* ~/.openclaw/workspace/tools/
 chmod +x ~/.openclaw/workspace/tools/checkpoint*
 
 # Add to PATH (also add to ~/.zshrc or ~/.bashrc for persistence)
