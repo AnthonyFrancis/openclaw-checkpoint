@@ -53,10 +53,12 @@ if [ "$HAS_REMOTE" = false ]; then
     echo "   1. Go to: https://github.com/new"
     echo "   2. Repository name: openclaw-state (or your choice)"
     echo "   3. Visibility: 🔒 Private  ← SELECT THIS!"
-    echo "   4. Do NOT initialize with README"
+    echo "   4. Do NOT initialize with README, .gitignore, or license"
     echo "   5. Click 'Create repository'"
+    echo "   6. On the next page: IGNORE GitHub's 'Quick setup' commands."
+    echo "      Do not run any of the commands GitHub shows. Just return here."
     echo ""
-    read -p "Press Enter when you've created a PRIVATE repository..."
+    read -p "Press Enter when you've created a PRIVATE repository (and did not run GitHub's commands)..."
     echo ""
     
     # Get GitHub username and repo

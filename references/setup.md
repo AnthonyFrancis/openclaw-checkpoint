@@ -27,8 +27,9 @@ checkpoint-init
 1. Go to https://github.com/new
 2. Repository name: `openclaw-state` (or your preference)
 3. Visibility: **Private** (important!)
-4. Do NOT initialize with README (we already have files)
+4. Do NOT initialize with README, .gitignore, or license
 5. Click "Create repository"
+6. On the next page: **Ignore GitHub's "Quick setup" commands.** Do not run any of the commands GitHub shows (they would create a README and break the backup). Just return to your terminal and continue with the setup.
 
 ### 3. Connect and Push
 
