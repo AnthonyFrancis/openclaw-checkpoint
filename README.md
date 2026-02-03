@@ -1,4 +1,4 @@
-# OpenClaw Checkpoint
+# OpenClaw Checkpoint - Backup
 
 > Backup and disaster recovery for [OpenClaw](https://github.com/openclaw/openclaw) workspaces
 
