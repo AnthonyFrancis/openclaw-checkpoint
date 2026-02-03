@@ -6,6 +6,7 @@ set -e
 WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
 REMOTE_URL="${CHECKPOINT_REMOTE:-origin}"
 BRANCH="${CHECKPOINT_BRANCH:-main}"
+LOCK_FILE="$WORKSPACE_DIR/.git/checkpoint.lock"
 
 cd "$WORKSPACE_DIR" || {
     echo "❌ Workspace not found at $WORKSPACE_DIR"
@@ -18,8 +19,15 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
-# Check if there are changes to commit
-if git diff --quiet HEAD && git diff --cached --quiet; then
+# Prevent concurrent runs with flock
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo "⏳ Another checkpoint is already running, skipping"
+    exit 0
+fi
+
+# Check if there are changes (staged, unstaged, or untracked)
+if git diff --quiet HEAD 2>/dev/null && git diff --cached --quiet 2>/dev/null && [ -z "$(git status --porcelain 2>/dev/null)" ]; then
     echo "⏭️  No changes to checkpoint"
     exit 0
 fi

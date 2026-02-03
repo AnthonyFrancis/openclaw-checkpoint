@@ -46,8 +46,12 @@ fi
 if [ "$FREQUENCY" = "disable" ]; then
     echo "🛑 Disabling automatic backups..."
     
-    # Remove from crontab
-    crontab -l 2>/dev/null | grep -v "openclaw-checkpoint" | crontab - 2>/dev/null || true
+    # Remove from crontab (match script path or marker comment)
+    if crontab -l 2>/dev/null | grep -q "checkpoint"; then
+        crontab -l 2>/dev/null | grep -v "tools/checkpoint" | grep -v "openclaw-checkpoint" > /tmp/crontab.tmp 2>/dev/null || echo -n "" > /tmp/crontab.tmp
+        crontab /tmp/crontab.tmp 2>/dev/null || true
+        rm -f /tmp/crontab.tmp
+    fi
     
     # Remove launchd plist on macOS
     if [[ "$OSTYPE" == darwin* ]]; then
@@ -138,11 +142,11 @@ else
         daily) CRON="0 9 * * *" ;;
     esac
     
-    # Remove existing entries
-    crontab -l 2>/dev/null | grep -v "openclaw-checkpoint" > /tmp/crontab.tmp || true
+    # Remove ALL existing checkpoint entries (match the script path pattern)
+    crontab -l 2>/dev/null | grep -v "tools/checkpoint" > /tmp/crontab.tmp 2>/dev/null || echo -n "" > /tmp/crontab.tmp
     
-    # Add new entry
-    echo "$CRON $CHECKPOINT_SCRIPT >> $HOME/.openclaw/logs/checkpoint.log 2>&1" >> /tmp/crontab.tmp
+    # Add new entry with marker comment
+    echo "$CRON $CHECKPOINT_SCRIPT >> $HOME/.openclaw/logs/checkpoint.log 2>&1  # openclaw-checkpoint" >> /tmp/crontab.tmp
     
     # Install crontab
     crontab /tmp/crontab.tmp
