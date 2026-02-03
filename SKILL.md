@@ -160,23 +160,31 @@ checkpoint-status
 - Regular health checks
 
 ### checkpoint-resume
-Restore state from remote repository.
+Restore state from remote repository, with first-time onboarding.
 
 ```bash
-checkpoint-resume          # Normal resume
+checkpoint-resume          # Normal resume (or onboarding if not set up)
 checkpoint-resume --force  # Discard local changes, pull remote
 ```
 
 **What it does:**
-- Fetches latest from remote
-- Checks if behind remote
-- Pulls changes if safe to do so
-- Shows recent commits
+- **First-time users:** Launches interactive restore onboarding flow
+  - Guides you through GitHub authentication (SSH, GitHub CLI, or PAT)
+  - Lets you specify your existing backup repository
+  - Verifies access and restores your checkpoint
+  - Handles merge/replace options if local files exist
+- **Returning users:** Fetches and pulls latest changes from remote
 
 **When to use:**
 - Starting OpenClaw on a new machine
 - After hardware failure/disaster
 - When resuming work on different computer
+- First-time restore from an existing backup
+
+**Onboarding flow triggers when:**
+- No workspace exists
+- Workspace exists but not a git repository
+- Git repository exists but no remote configured
 
 ### checkpoint-init
 Initialize workspace for checkpoint system.
@@ -260,6 +268,23 @@ checkpoint
 
 ### Setup on Second Machine
 
+**Option 1: Interactive Restore (Recommended)**
+
+```bash
+# Install the checkpoint skill first
+curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
+
+# Run checkpoint-resume - it will guide you through the entire process
+checkpoint-resume
+```
+
+This will:
+- Help you authenticate with GitHub (if not already)
+- Ask for your backup repository details
+- Clone/restore your checkpoint automatically
+
+**Option 2: Manual Clone**
+
 ```bash
 # 1. Clone repository (use SSH)
 git clone git@github.com:YOURUSER/openclaw-state.git ~/.openclaw/workspace
@@ -322,18 +347,26 @@ crontab -e
 # 1. Install OpenClaw
 brew install openclaw  # or your install method
 
-# 2. Restore workspace (use SSH)
-git clone git@github.com:YOURUSER/openclaw-state.git ~/.openclaw/workspace
+# 2. Install checkpoint skill and run interactive restore
+curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
+checkpoint-resume
+# Follow the interactive prompts to:
+# - Authenticate with GitHub
+# - Enter your backup repository (e.g., YOURUSER/openclaw-state)
+# - Restore your checkpoint
 
-# 3. Restore secrets from 1Password
+# 3. Restore secrets from 1Password (API keys are not backed up for security)
 cat > ~/.openclaw/workspace/.env.thisweek << 'EOF'
 THISWEEK_API_KEY=your_key_here
 EOF
 
-# 4. Start OpenClaw
+# 4. Enable automatic backups on this machine
+checkpoint-schedule hourly
+
+# 5. Start OpenClaw
 openclaw gateway start
 
-# 5. Verify
+# 6. Verify
 # Ask assistant: "What were we working on?"
 # Should recall everything up to last checkpoint
 ```
@@ -370,8 +403,8 @@ Your backup contains sensitive personal data:
 
 ## Troubleshooting
 
-### "Not a git repository"
-Run `checkpoint-init` first, or `checkpoint-setup` for full guided setup.
+### "Not a git repository" or "'origin' does not appear to be a git repository"
+Running `checkpoint-resume` will now automatically start the interactive restore onboarding flow to help you connect to your backup repository. Alternatively, run `checkpoint-setup` to create a new backup from scratch.
 
 ### "Failed to push checkpoint"
 Another machine pushed changes. Run `checkpoint-resume` first, then `checkpoint`.

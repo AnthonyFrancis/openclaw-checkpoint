@@ -6,21 +6,524 @@ set -e
 WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
 REMOTE_URL="${CHECKPOINT_REMOTE:-origin}"
 BRANCH="${CHECKPOINT_BRANCH:-main}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ===========================================================================
+# RESTORE ONBOARDING FLOW
+# Triggered when no remote is configured (first-time restore scenario)
+# ===========================================================================
+restore_onboarding() {
+    clear
+    echo "🔄 OpenClaw Checkpoint Restore"
+    echo "==============================="
+    echo ""
+    echo "Welcome! It looks like this is a fresh OpenClaw installation."
+    echo ""
+    echo "Do you have an existing checkpoint backup to restore from?"
+    echo ""
+    echo "   1) Yes - I have a GitHub repo with my OpenClaw backup"
+    echo "   2) No  - I'm setting up OpenClaw for the first time"
+    echo ""
+    read -p "Choose [1-2]: " RESTORE_CHOICE
+    
+    if [ "$RESTORE_CHOICE" = "2" ]; then
+        echo ""
+        echo "No problem! Run 'checkpoint-setup' to create your first backup."
+        echo ""
+        echo "   checkpoint-setup"
+        echo ""
+        exit 0
+    fi
+    
+    if [ "$RESTORE_CHOICE" != "1" ]; then
+        echo "❌ Invalid choice. Please run checkpoint-resume again."
+        exit 1
+    fi
+    
+    # Step 1: GitHub Authentication
+    echo ""
+    echo "🔐 Step 1: GitHub Authentication"
+    echo ""
+    
+    # Check if already authenticated with GitHub
+    GITHUB_AUTHENTICATED=false
+    
+    # Test SSH authentication
+    if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        echo "   ✅ Already authenticated with GitHub (SSH)"
+        GITHUB_AUTHENTICATED=true
+        AUTH_METHOD="ssh"
+    elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        echo "   ✅ Already authenticated with GitHub CLI"
+        GITHUB_AUTHENTICATED=true
+        AUTH_METHOD="https"
+    fi
+    
+    if [ "$GITHUB_AUTHENTICATED" = false ]; then
+        echo "   You need to authenticate with GitHub to access your backup."
+        echo ""
+        echo "   Choose authentication method:"
+        echo ""
+        echo "   1) SSH Key (recommended - no token expiry)"
+        echo "   2) GitHub CLI (opens browser automatically)"
+        echo "   3) Personal Access Token (manual)"
+        echo ""
+        read -p "Choose [1-3, default: 1]: " AUTH_CHOICE
+        AUTH_CHOICE=${AUTH_CHOICE:-1}
+        
+        case "$AUTH_CHOICE" in
+            1)
+                AUTH_METHOD="ssh"
+                setup_ssh_auth
+                ;;
+            2)
+                AUTH_METHOD="https"
+                setup_gh_cli_auth
+                ;;
+            3)
+                AUTH_METHOD="https"
+                setup_pat_auth
+                ;;
+            *)
+                AUTH_METHOD="ssh"
+                setup_ssh_auth
+                ;;
+        esac
+    fi
+    
+    # Step 2: Get repository information
+    echo ""
+    echo "📦 Step 2: Connect to your backup repository"
+    echo ""
+    echo "   Enter the details of your existing checkpoint repository."
+    echo ""
+    read -p "   GitHub username: " GITHUB_USER
+    read -p "   Repository name [openclaw-state]: " REPO_NAME
+    REPO_NAME=${REPO_NAME:-openclaw-state}
+    
+    # Build the remote URL based on auth method
+    if [ "$AUTH_METHOD" = "ssh" ]; then
+        CLONE_URL="git@github.com:$GITHUB_USER/$REPO_NAME.git"
+    else
+        CLONE_URL="https://github.com/$GITHUB_USER/$REPO_NAME.git"
+    fi
+    
+    echo ""
+    echo "   Repository: $CLONE_URL"
+    echo ""
+    
+    # Step 3: Verify repository exists and is accessible
+    echo "🔍 Step 3: Verifying repository access..."
+    if ! git ls-remote "$CLONE_URL" HEAD >/dev/null 2>&1; then
+        echo ""
+        echo "   ❌ Cannot access repository: $CLONE_URL"
+        echo ""
+        echo "   Possible issues:"
+        echo "   • Repository doesn't exist"
+        echo "   • Repository is private and you don't have access"
+        echo "   • Authentication failed"
+        echo ""
+        echo "   Please verify:"
+        echo "   • The username and repository name are correct"
+        echo "   • You have access to the repository"
+        echo "   • Your authentication is set up correctly"
+        echo ""
+        echo "   To retry authentication: checkpoint-auth"
+        exit 1
+    fi
+    echo "   ✅ Repository accessible"
+    
+    # Step 4: Restore the backup
+    echo ""
+    echo "📥 Step 4: Restoring your OpenClaw state..."
+    echo ""
+    
+    # Check if workspace directory exists and has content
+    if [ -d "$WORKSPACE_DIR" ]; then
+        # Check if it has any meaningful content (not just empty or skills folder)
+        EXISTING_FILES=$(find "$WORKSPACE_DIR" -maxdepth 1 -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$EXISTING_FILES" -gt 0 ]; then
+            echo "   ⚠️  Your workspace already has files:"
+            ls -la "$WORKSPACE_DIR"/*.md 2>/dev/null | head -5 | sed 's/^/      /'
+            echo ""
+            echo "   How would you like to proceed?"
+            echo ""
+            echo "   1) Merge - Keep local files, add remote backup (may cause conflicts)"
+            echo "   2) Replace - Discard local files, use remote backup"
+            echo "   3) Cancel - Exit without making changes"
+            echo ""
+            read -p "   Choose [1-3]: " MERGE_CHOICE
+            
+            case "$MERGE_CHOICE" in
+                1)
+                    restore_merge "$CLONE_URL"
+                    ;;
+                2)
+                    restore_replace "$CLONE_URL"
+                    ;;
+                *)
+                    echo ""
+                    echo "   Cancelled. No changes made."
+                    exit 0
+                    ;;
+            esac
+        else
+            # Workspace exists but is mostly empty - safe to replace
+            restore_replace "$CLONE_URL"
+        fi
+    else
+        # No workspace exists - fresh clone
+        restore_fresh "$CLONE_URL"
+    fi
+    
+    # Step 5: Verify restoration
+    echo ""
+    echo "✅ Step 5: Restoration complete!"
+    echo ""
+    cd "$WORKSPACE_DIR"
+    echo "   Commit: $(git rev-parse --short HEAD)"
+    echo "   Time: $(git log -1 --format=%cd --date=iso)"
+    echo ""
+    echo "   📝 Restored files:"
+    git ls-files | grep -E '\.(md|json)$' | head -10 | sed 's/^/      /'
+    FILE_COUNT=$(git ls-files | wc -l | tr -d ' ')
+    if [ "$FILE_COUNT" -gt 10 ]; then
+        echo "      ... and $((FILE_COUNT - 10)) more files"
+    fi
+    echo ""
+    echo "=============================="
+    echo "🎉 Your OpenClaw state has been restored!"
+    echo ""
+    echo "   Next steps:"
+    echo "   • Restore your API keys (they're not backed up for security)"
+    echo "   • Run 'checkpoint-schedule hourly' to enable automatic backups"
+    echo "   • Start OpenClaw with 'openclaw gateway start'"
+    echo ""
+}
+
+# SSH authentication setup
+setup_ssh_auth() {
+    echo ""
+    echo "🔑 Setting up SSH authentication..."
+    
+    # Ensure .ssh directory exists
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    
+    # Add GitHub to known_hosts if not already there
+    if ! grep -q "github.com" ~/.ssh/known_hosts 2>/dev/null; then
+        echo "   Adding GitHub to known hosts..."
+        ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+        chmod 600 ~/.ssh/known_hosts
+    fi
+    
+    # Check for existing SSH key
+    SSH_KEY="$HOME/.ssh/id_ed25519"
+    if [ -f "$SSH_KEY" ]; then
+        echo "   ✅ Found existing SSH key: $SSH_KEY"
+        
+        # Test if already authorized
+        if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+            echo "   ✅ SSH key already authorized on GitHub!"
+            return 0
+        fi
+    else
+        echo "   Generating new SSH key..."
+        ssh-keygen -t ed25519 -C "openclaw-checkpoint" -f "$SSH_KEY" -N ""
+        echo "   ✅ SSH key generated"
+    fi
+    
+    # Show public key and guide user to add it
+    echo ""
+    echo "   Your public key:"
+    echo "   ─────────────────────────────────────────────────────────"
+    cat "${SSH_KEY}.pub"
+    echo "   ─────────────────────────────────────────────────────────"
+    echo ""
+    
+    # Copy to clipboard if possible
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        cat "${SSH_KEY}.pub" | pbcopy
+        echo "   📋 Copied to clipboard!"
+    elif command -v xclip >/dev/null 2>&1; then
+        cat "${SSH_KEY}.pub" | xclip -selection clipboard
+        echo "   📋 Copied to clipboard!"
+    fi
+    
+    echo ""
+    echo "   Add this key to your GitHub account:"
+    echo ""
+    read -p "   Press Enter to open GitHub SSH settings..."
+    
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        open "https://github.com/settings/ssh/new"
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "https://github.com/settings/ssh/new"
+    else
+        echo "   Please open: https://github.com/settings/ssh/new"
+    fi
+    
+    echo ""
+    echo "   Instructions:"
+    echo "   1. Title: 'OpenClaw Checkpoint' (or any name)"
+    echo "   2. Key: Paste the public key (already copied)"
+    echo "   3. Click 'Add SSH key'"
+    echo ""
+    read -p "   Press Enter when you've added the key..."
+    
+    # Verify
+    echo ""
+    echo "   🔍 Testing SSH connection..."
+    if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        echo "   ✅ SSH authentication successful!"
+    else
+        echo "   ⚠️  SSH test didn't confirm success, but we'll proceed."
+        echo "      If you encounter issues, run: checkpoint-auth"
+    fi
+}
+
+# GitHub CLI authentication setup
+setup_gh_cli_auth() {
+    echo ""
+    echo "🔧 Setting up GitHub CLI authentication..."
+    
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "   GitHub CLI not installed."
+        echo ""
+        read -p "   Install GitHub CLI? [Y/n]: " INSTALL_GH
+        INSTALL_GH=${INSTALL_GH:-Y}
+        
+        if [[ "$INSTALL_GH" =~ ^[Yy]$ ]]; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                echo "   Installing via Homebrew..."
+                brew install gh
+            elif command -v apt-get >/dev/null 2>&1; then
+                echo "   Installing via apt..."
+                curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+                sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+                echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+                sudo apt update
+                sudo apt install gh -y
+            else
+                echo "   ❌ Please install GitHub CLI manually:"
+                echo "   https://github.com/cli/cli#installation"
+                exit 1
+            fi
+        else
+            echo "   Falling back to SSH authentication..."
+            AUTH_METHOD="ssh"
+            setup_ssh_auth
+            return
+        fi
+    fi
+    
+    echo ""
+    echo "   🌐 Opening browser for GitHub authentication..."
+    gh auth login --git-protocol https --web
+    gh auth setup-git
+    echo "   ✅ GitHub CLI authentication complete!"
+}
+
+# Personal Access Token authentication setup
+setup_pat_auth() {
+    echo ""
+    echo "🔑 Setting up Personal Access Token..."
+    echo ""
+    
+    TOKEN_URL="https://github.com/settings/tokens/new?description=OpenClaw%20Checkpoint&scopes=repo"
+    
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        open "$TOKEN_URL"
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$TOKEN_URL"
+    else
+        echo "   Please open: $TOKEN_URL"
+    fi
+    
+    echo "   Instructions:"
+    echo "   1. Note: 'OpenClaw Checkpoint'"
+    echo "   2. Expiration: 90 days (or no expiration)"
+    echo "   3. Scopes: Check 'repo' (full control)"
+    echo "   4. Click 'Generate token'"
+    echo "   5. COPY the token immediately"
+    echo ""
+    read -p "   Press Enter when you have your token..."
+    echo ""
+    read -s -p "   Paste your GitHub token: " GITHUB_TOKEN
+    echo ""
+    
+    # Store credentials
+    git config --global credential.helper osxkeychain 2>/dev/null || \
+    git config --global credential.helper libsecret 2>/dev/null || \
+    git config --global credential.helper store
+    
+    echo "   ✅ Token configured"
+}
+
+# Restore by merging into existing workspace
+restore_merge() {
+    local CLONE_URL="$1"
+    
+    echo "   Merging remote backup with local files..."
+    
+    cd "$WORKSPACE_DIR"
+    
+    # Initialize git if needed
+    if [ ! -d ".git" ]; then
+        git init --quiet
+    fi
+    
+    # Add remote
+    git remote remove origin 2>/dev/null || true
+    git remote add origin "$CLONE_URL"
+    
+    # Fetch remote
+    git fetch origin main --quiet 2>/dev/null || git fetch origin master --quiet
+    
+    # Determine branch name
+    if git rev-parse --verify origin/main >/dev/null 2>&1; then
+        REMOTE_BRANCH="main"
+    else
+        REMOTE_BRANCH="master"
+    fi
+    
+    # Commit local changes if any
+    git add -A
+    if ! git diff --cached --quiet 2>/dev/null; then
+        git commit -m "Local state before restore" --quiet
+    fi
+    
+    # Try to merge
+    if ! git pull origin "$REMOTE_BRANCH" --allow-unrelated-histories --no-edit 2>/dev/null; then
+        echo ""
+        echo "   ⚠️  Merge conflicts detected. You'll need to resolve them manually:"
+        git status | grep "both modified" | sed 's/^/      /'
+        echo ""
+        echo "   After resolving conflicts, run:"
+        echo "      cd ~/.openclaw/workspace"
+        echo "      git add -A && git commit -m 'Resolved merge conflicts'"
+        exit 1
+    fi
+    
+    echo "   ✅ Merge successful"
+}
+
+# Restore by replacing local workspace
+restore_replace() {
+    local CLONE_URL="$1"
+    
+    echo "   Replacing local workspace with remote backup..."
+    
+    # Backup skills folder if it exists (it's not part of the checkpoint)
+    SKILLS_BACKUP=""
+    if [ -d "$WORKSPACE_DIR/skills" ]; then
+        SKILLS_BACKUP=$(mktemp -d)
+        cp -r "$WORKSPACE_DIR/skills" "$SKILLS_BACKUP/"
+    fi
+    
+    # Backup tools folder if it exists (contains installed checkpoint scripts)
+    TOOLS_BACKUP=""
+    if [ -d "$WORKSPACE_DIR/tools" ]; then
+        TOOLS_BACKUP=$(mktemp -d)
+        cp -r "$WORKSPACE_DIR/tools" "$TOOLS_BACKUP/"
+    fi
+    
+    # Change to a safe directory before removing workspace
+    cd "$HOME" || cd /tmp
+    
+    # Remove existing workspace
+    rm -rf "$WORKSPACE_DIR"
+    
+    # Clone fresh
+    git clone "$CLONE_URL" "$WORKSPACE_DIR" --quiet
+    
+    # Restore skills folder
+    if [ -n "$SKILLS_BACKUP" ] && [ -d "$SKILLS_BACKUP/skills" ]; then
+        cp -r "$SKILLS_BACKUP/skills" "$WORKSPACE_DIR/"
+        rm -rf "$SKILLS_BACKUP"
+    fi
+    
+    # Restore tools folder
+    if [ -n "$TOOLS_BACKUP" ] && [ -d "$TOOLS_BACKUP/tools" ]; then
+        cp -r "$TOOLS_BACKUP/tools" "$WORKSPACE_DIR/"
+        rm -rf "$TOOLS_BACKUP"
+    fi
+    
+    echo "   ✅ Workspace replaced with remote backup"
+}
+
+# Restore to fresh/empty workspace
+restore_fresh() {
+    local CLONE_URL="$1"
+    
+    echo "   Cloning backup to fresh workspace..."
+    
+    # Ensure parent directory exists
+    mkdir -p "$(dirname "$WORKSPACE_DIR")"
+    
+    # Clone
+    git clone "$CLONE_URL" "$WORKSPACE_DIR" --quiet
+    
+    echo "   ✅ Backup cloned successfully"
+}
+
+# ===========================================================================
+# MAIN SCRIPT LOGIC
+# ===========================================================================
+
+# Check if workspace directory exists
+if [ ! -d "$WORKSPACE_DIR" ]; then
+    # No workspace at all - definitely need onboarding
+    restore_onboarding
+    exit 0
+fi
 
 cd "$WORKSPACE_DIR" || {
-    echo "❌ Workspace not found at $WORKSPACE_DIR"
+    echo "❌ Cannot access workspace at $WORKSPACE_DIR"
     exit 1
 }
 
 # Check if git repo exists
 if [ ! -d ".git" ]; then
-    echo "❌ Not a git repository. Run 'checkpoint-init' first."
-    exit 1
+    # Workspace exists but no git repo - need onboarding
+    restore_onboarding
+    exit 0
 fi
 
-# Fetch latest from remote
+# Check if remote is configured
+if ! git remote get-url origin >/dev/null 2>&1; then
+    # Git repo exists but no remote - need onboarding
+    restore_onboarding
+    exit 0
+fi
+
+# Normal resume flow - remote is configured
 echo "☁️  Fetching latest checkpoint..."
-git fetch "$REMOTE_URL" "$BRANCH" --quiet
+if ! git fetch "$REMOTE_URL" "$BRANCH" --quiet 2>&1; then
+    FETCH_ERROR=$(git fetch "$REMOTE_URL" "$BRANCH" 2>&1)
+    
+    # Check if it's an authentication/access issue
+    if echo "$FETCH_ERROR" | grep -qE "permission denied|Could not read from remote|does not appear to be a git repository"; then
+        echo ""
+        echo "❌ Cannot access remote repository"
+        echo ""
+        echo "$FETCH_ERROR" | sed 's/^/   /'
+        echo ""
+        echo "   This could mean:"
+        echo "   • The repository no longer exists"
+        echo "   • Your authentication has expired"
+        echo "   • You don't have access to the repository"
+        echo ""
+        echo "   Options:"
+        echo "   • Run 'checkpoint-auth' to re-authenticate"
+        echo "   • Run 'checkpoint-reset' then 'checkpoint-resume' to start fresh"
+        exit 1
+    fi
+    
+    echo "❌ Failed to fetch from remote"
+    echo "$FETCH_ERROR" | sed 's/^/   /'
+    exit 1
+fi
 
 # Check if we're behind
 LOCAL=$(git rev-parse @)
