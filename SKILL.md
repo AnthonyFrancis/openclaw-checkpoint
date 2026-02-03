@@ -7,6 +7,8 @@ description: Backup and restore OpenClaw workspace state across machines using g
 
 Backup and restore your OpenClaw identity, memory, and configuration across machines.
 
+**Platform:** macOS and Linux only. Windows is not supported.
+
 ## Overview
 
 This skill provides disaster recovery for OpenClaw by syncing your workspace to a git repository. It preserves:

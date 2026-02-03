@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
+**Platform:** macOS and Linux only. Windows is not supported.
+
 Automatically sync your OpenClaw agent's identity, memory, and configuration to GitHub. Never lose your agent's state again.
 
 ## What Gets Backed Up
@@ -106,7 +108,7 @@ Your backup contains personal data:
 
 ## Requirements
 
-- macOS or Linux
+- macOS or Linux (Windows is not supported)
 - Git
 - SSH key or GitHub Personal Access Token
 - A **private** GitHub repository for storing backups
