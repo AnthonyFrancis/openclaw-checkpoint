@@ -35,13 +35,28 @@ Add the `export PATH` line to your `~/.zshrc` or `~/.bashrc` for persistence.
 
 ## After Installation
 
-Run the interactive setup wizard:
+### New Setup (First Time)
+
+Run the setup wizard to create a new backup:
 
 ```bash
 checkpoint-setup
 ```
 
 This guides you through creating a private GitHub repo and configuring automatic backups.
+
+### Restore from Existing Backup
+
+If you already have a checkpoint backup on GitHub (e.g., setting up a new machine):
+
+```bash
+checkpoint-resume
+```
+
+This launches an interactive restore wizard that:
+- Helps you authenticate with GitHub
+- Connects to your existing backup repository
+- Restores your OpenClaw state
 
 ## Commands Available After Install
 
