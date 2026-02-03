@@ -1,0 +1,87 @@
+#!/bin/bash
+# checkpoint-init - Initialize OpenClaw workspace for checkpoint/restore
+
+set -e
+
+WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+
+echo "🚀 Initializing OpenClaw checkpoint system..."
+echo ""
+
+# Check if already initialized
+if [ -d "$WORKSPACE_DIR/.git" ]; then
+    echo "✅ Workspace already initialized as git repository"
+    echo "   Remote: $(git -C "$WORKSPACE_DIR" remote get-url origin 2>/dev/null || echo 'none')"
+    exit 0
+fi
+
+cd "$WORKSPACE_DIR" || {
+    echo "❌ Workspace not found at $WORKSPACE_DIR"
+    exit 1
+}
+
+# Initialize git
+echo "📦 Initializing git repository..."
+git init --quiet
+
+# Create .gitignore
+echo "📝 Creating .gitignore..."
+cat > .gitignore << 'EOF'
+# Secrets - NEVER sync
+.env.*
+.credentials.json
+.google-tokens.json
+.google-tasks-credentials.json
+token.pickle
+refresh_token.txt
+*.key
+*.pem
+.ssh/
+
+# Ephemeral - local only
+tmp/
+media/inbound/
+media/outbound/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+logs/
+.agent/
+.cache/
+*.swp
+*.swo
+*~
+
+# Generated data - sync via API
+memory/google-tasks.json
+memory/stripe-data.json
+memory/amazon-data.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+EOF
+
+# Create initial commit with ALL files
+echo "💾 Creating initial checkpoint..."
+git add -A
+git commit -m "Initial checkpoint" --quiet
+
+echo ""
+echo "✅ Workspace initialized for checkpoint/restore"
+echo ""
+echo "Next steps:"
+echo "  1. Create a private GitHub repository"
+echo "  2. Add it as remote:"
+echo "     git remote add origin https://github.com/YOURUSER/openclaw-state.git"
+echo "  3. Push initial checkpoint:"
+echo "     checkpoint"
+echo ""
+echo "Or restore from existing repository:"
+echo "  git remote add origin https://github.com/YOURUSER/openclaw-state.git"
+echo "  checkpoint-resume"

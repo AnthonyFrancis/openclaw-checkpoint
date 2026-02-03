@@ -1,0 +1,91 @@
+#!/bin/bash
+# checkpoint-reset - Reset checkpoint system for fresh setup
+
+set -e
+
+WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+
+echo "🔄 OpenClaw Checkpoint Reset"
+echo "=============================="
+echo ""
+echo "This will reset your checkpoint system so you can start fresh."
+echo ""
+echo "What would you like to reset?"
+echo ""
+echo "   1) Local git repository only (keep SSH keys)"
+echo "   2) Everything (git repo + SSH keys + known_hosts)"
+echo "   3) Cancel"
+echo ""
+read -p "Choose [1-3]: " RESET_CHOICE
+
+case "$RESET_CHOICE" in
+    1)
+        echo ""
+        echo "🗑️  Removing local git repository..."
+        if [ -d "$WORKSPACE_DIR/.git" ]; then
+            rm -rf "$WORKSPACE_DIR/.git"
+            echo "   ✅ Git repository removed"
+        else
+            echo "   ⏭️  No git repository found"
+        fi
+        ;;
+    2)
+        echo ""
+        echo "🗑️  Removing local git repository..."
+        if [ -d "$WORKSPACE_DIR/.git" ]; then
+            rm -rf "$WORKSPACE_DIR/.git"
+            echo "   ✅ Git repository removed"
+        else
+            echo "   ⏭️  No git repository found"
+        fi
+        
+        echo ""
+        echo "🔑 Removing SSH keys..."
+        if [ -f "$HOME/.ssh/id_ed25519" ]; then
+            rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub"
+            echo "   ✅ SSH keys removed"
+        else
+            echo "   ⏭️  No SSH keys found"
+        fi
+        
+        echo ""
+        echo "🌐 Removing known_hosts..."
+        if [ -f "$HOME/.ssh/known_hosts" ]; then
+            # Only remove github.com entry, not the whole file
+            if grep -q "github.com" "$HOME/.ssh/known_hosts" 2>/dev/null; then
+                grep -v "github.com" "$HOME/.ssh/known_hosts" > "$HOME/.ssh/known_hosts.tmp" 2>/dev/null || true
+                mv "$HOME/.ssh/known_hosts.tmp" "$HOME/.ssh/known_hosts" 2>/dev/null || rm -f "$HOME/.ssh/known_hosts"
+                echo "   ✅ GitHub removed from known_hosts"
+            else
+                echo "   ⏭️  GitHub not in known_hosts"
+            fi
+        else
+            echo "   ⏭️  No known_hosts file found"
+        fi
+        ;;
+    3)
+        echo ""
+        echo "   Cancelled."
+        exit 0
+        ;;
+    *)
+        echo ""
+        echo "   ❌ Invalid option"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo "┌─────────────────────────────────────────────────────────┐"
+echo "│  📝 Don't forget to delete your GitHub repo too!        │"
+echo "│                                                         │"
+echo "│  Go to: https://github.com/YOURUSER/REPO/settings       │"
+echo "│  Scroll to 'Danger Zone' → 'Delete this repository'     │"
+echo "└─────────────────────────────────────────────────────────┘"
+echo ""
+echo "=============================="
+echo "✅ Reset complete!"
+echo ""
+echo "To start fresh, run:"
+echo "   checkpoint-setup"
+echo ""

@@ -1,0 +1,134 @@
+#!/bin/bash
+# checkpoint-status - Check backup status and health
+
+set -e
+
+WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+
+cd "$WORKSPACE_DIR" || {
+    echo "❌ Workspace not found at $WORKSPACE_DIR"
+    exit 1
+}
+
+# Check if git repo exists
+if [ ! -d ".git" ]; then
+    echo "❌ Not a git repository. Run 'checkpoint-init' first."
+    exit 1
+fi
+
+echo "📊 OpenClaw Checkpoint Status"
+echo "=============================="
+echo ""
+
+# Repository info
+echo "📁 Repository:"
+echo "   Location: $WORKSPACE_DIR"
+if git remote get-url origin >/dev/null 2>&1; then
+    REMOTE=$(git remote get-url origin)
+    echo "   Remote: $REMOTE"
+else
+    echo "   Remote: ❌ Not configured"
+fi
+
+echo ""
+
+# Last backup
+echo "💾 Last Backup:"
+LAST_COMMIT=$(git log -1 --format="%H" 2>/dev/null || echo "")
+if [ -n "$LAST_COMMIT" ]; then
+    LAST_TIME=$(git log -1 --format="%cd" --date=iso)
+    LAST_RELATIVE=$(git log -1 --format="%cd" --date=relative)
+    LAST_MSG=$(git log -1 --format="%s")
+    echo "   Time: $LAST_TIME ($LAST_RELATIVE)"
+    echo "   Commit: ${LAST_COMMIT:0:8}"
+    echo "   Message: $LAST_MSG"
+    
+    # Check if we're behind remote
+    git fetch origin main --quiet 2>/dev/null || true
+    LOCAL=$(git rev-parse @ 2>/dev/null || echo "")
+    REMOTE=$(git rev-parse origin/main 2>/dev/null || echo "")
+    
+    if [ "$LOCAL" != "$REMOTE" ] && [ -n "$REMOTE" ]; then
+        BEHIND=$(git rev-list HEAD..origin/main --count 2>/dev/null || echo "0")
+        echo "   ⚠️  Behind remote by $BEHIND commit(s)"
+        echo "      Run: checkpoint-resume"
+    else
+        echo "   ✅ Up to date with remote"
+    fi
+else
+    echo "   ❌ No backups yet"
+fi
+
+echo ""
+
+# Check for uncommitted changes
+echo "📝 Local Changes:"
+if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+    CHANGED=$(git status --short | wc -l)
+    echo "   ⚠️  $CHANGED file(s) with uncommitted changes"
+    echo "      Run: checkpoint"
+else
+    echo "   ✅ No uncommitted changes"
+fi
+
+echo ""
+
+# Auto-backup schedule
+echo "⏰ Auto-Backup Schedule:"
+if [ "$OSTYPE" = "darwin"* ]; then
+    # macOS - check launchd
+    PLIST="$HOME/Library/LaunchAgents/com.openclaw.checkpoint.plist"
+    if [ -f "$PLIST" ]; then
+        if launchctl list | grep -q "com.openclaw.checkpoint"; then
+            INTERVAL=$(grep -A1 "StartInterval" "$PLIST" | grep integer | sed 's/[^0-9]//g')
+            case "$INTERVAL" in
+                900) FREQ="Every 15 minutes" ;;
+                1800) FREQ="Every 30 minutes" ;;
+                3600) FREQ="Every hour" ;;
+                7200) FREQ="Every 2 hours" ;;
+                14400) FREQ="Every 4 hours" ;;
+                86400) FREQ="Daily" ;;
+                *) FREQ="Every $((INTERVAL / 60)) minutes" ;;
+            esac
+            echo "   ✅ $FREQ (via launchd)"
+            echo "   Logs: ~/.openclaw/logs/checkpoint.log"
+        else
+            echo "   ⚠️  Configured but not running"
+            echo "      Run: launchctl load ~/Library/LaunchAgents/com.openclaw.checkpoint.plist"
+        fi
+    else
+        echo "   ❌ Not scheduled"
+        echo "      Run: checkpoint-schedule hourly"
+    fi
+else
+    # Linux - check cron
+    if crontab -l 2>/dev/null | grep -q "openclaw-checkpoint"; then
+        CRON_LINE=$(crontab -l 2>/dev/null | grep "openclaw-checkpoint")
+        echo "   ✅ Scheduled (via cron)"
+        echo "   Entry: $CRON_LINE"
+    else
+        echo "   ❌ Not scheduled"
+        echo "      Run: checkpoint-schedule hourly"
+    fi
+fi
+
+echo ""
+
+# Recent log entries (if log exists)
+LOG_FILE="$HOME/.openclaw/logs/checkpoint.log"
+if [ -f "$LOG_FILE" ]; then
+    echo "📜 Recent Backup Activity:"
+    tail -5 "$LOG_FILE" 2>/dev/null | sed 's/^/   /' || echo "   (log file exists but is empty)"
+else
+    echo "📜 Recent Backup Activity:"
+    echo "   (no log file yet)"
+fi
+
+echo ""
+echo "=============================="
+echo "💡 Quick Actions:"
+echo "   checkpoint              - Backup now"
+echo "   checkpoint-resume       - Restore from remote"
+echo "   checkpoint-schedule     - Change backup frequency"
+echo "   checkpoint-stop         - Stop automatic backups"
+echo "   checkpoint-status       - Show this status"

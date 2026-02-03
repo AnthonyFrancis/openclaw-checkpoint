@@ -1,0 +1,14 @@
+#!/bin/bash
+# checkpoint-stop - Stop automatic backups
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "🛑 Stopping automatic backups..."
+
+# Use checkpoint-schedule disable
+"$SCRIPT_DIR/checkpoint-schedule" disable
+
+echo ""
+echo "💡 To restart backups: checkpoint-schedule hourly  # Or 15min, 30min, daily, etc."

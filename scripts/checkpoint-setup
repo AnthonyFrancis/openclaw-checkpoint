@@ -1,0 +1,366 @@
+#!/bin/bash
+# checkpoint-setup - Interactive onboarding for OpenClaw checkpoint system
+
+set -e
+
+WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+clear
+echo "🚀 OpenClaw Checkpoint Setup"
+echo "=============================="
+echo ""
+echo "This will help you set up automatic backups of your OpenClaw state."
+echo ""
+read -p "Press Enter to continue..."
+
+# Step 1: Check if already initialized
+echo ""
+echo "📋 Step 1: Checking workspace..."
+if [ -d "$WORKSPACE_DIR/.git" ]; then
+    echo "   ✅ Workspace already initialized as git repository"
+    if git -C "$WORKSPACE_DIR" remote get-url origin >/dev/null 2>&1; then
+        REMOTE=$(git -C "$WORKSPACE_DIR" remote get-url origin)
+        echo "   ✅ Remote configured: $REMOTE"
+        HAS_REMOTE=true
+    else
+        echo "   ⚠️  No remote configured yet"
+        HAS_REMOTE=false
+    fi
+else
+    echo "   📝 Initializing workspace..."
+    "$SCRIPT_DIR/checkpoint-init"
+    HAS_REMOTE=false
+fi
+
+# Step 2: Configure remote (if not done)
+if [ "$HAS_REMOTE" = false ]; then
+    echo ""
+    echo "📦 Step 2: Configure backup destination"
+    echo ""
+    echo "You need a PRIVATE GitHub repository to store your backups."
+    echo ""
+    echo "   ┌─────────────────────────────────────────────────────────┐"
+    echo "   │  ⚠️  IMPORTANT: Repository MUST be PRIVATE!             │"
+    echo "   │                                                         │"
+    echo "   │  Your backup contains sensitive data:                   │"
+    echo "   │  • SOUL.md, MEMORY.md (your identity & memories)        │"
+    echo "   │  • Personal notes and conversation history              │"
+    echo "   │                                                         │"
+    echo "   │  If you make it public, anyone can see your data!       │"
+    echo "   └─────────────────────────────────────────────────────────┘"
+    echo ""
+    echo "   1. Go to: https://github.com/new"
+    echo "   2. Repository name: openclaw-state (or your choice)"
+    echo "   3. Visibility: 🔒 Private  ← SELECT THIS!"
+    echo "   4. Do NOT initialize with README"
+    echo "   5. Click 'Create repository'"
+    echo ""
+    read -p "Press Enter when you've created a PRIVATE repository..."
+    echo ""
+    
+    # Get GitHub username and repo
+    read -p "Enter your GitHub username: " GITHUB_USER
+    read -p "Enter your repository name [openclaw-state]: " REPO_NAME
+    REPO_NAME=${REPO_NAME:-openclaw-state}
+    
+    # Step 3: Choose authentication method
+    echo ""
+    echo "🔐 Step 3: Authentication"
+    echo ""
+    echo "Choose how to authenticate with GitHub:"
+    echo ""
+    echo "   1) SSH Key (recommended - no token expiry)"
+    echo "   2) Personal Access Token (expires, needs renewal)"
+    echo ""
+    read -p "Choose [1-2, default: 1]: " AUTH_METHOD
+    AUTH_METHOD=${AUTH_METHOD:-1}
+    
+    cd "$WORKSPACE_DIR"
+    
+    if [ "$AUTH_METHOD" = "1" ]; then
+        # SSH Authentication
+        echo ""
+        echo "🔑 Setting up SSH authentication..."
+        
+        # Ensure .ssh directory exists
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Add GitHub to known_hosts if not already there
+        if ! grep -q "github.com" ~/.ssh/known_hosts 2>/dev/null; then
+            echo "   Adding GitHub to known hosts..."
+            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+            chmod 600 ~/.ssh/known_hosts
+        fi
+        
+        # Check for existing SSH key or generate new one
+        SSH_KEY="$HOME/.ssh/id_ed25519"
+        if [ -f "$SSH_KEY" ]; then
+            echo "   ✅ Using existing SSH key: $SSH_KEY"
+            
+            # Test if SSH key is already authorized on GitHub
+            echo "   🔍 Testing GitHub connection..."
+            if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+                echo "   ✅ SSH key already authorized on GitHub!"
+                SSH_ALREADY_AUTHORIZED=true
+            else
+                echo "   ⚠️  SSH key not yet authorized on GitHub"
+                SSH_ALREADY_AUTHORIZED=false
+            fi
+        else
+            echo "   Generating new SSH key..."
+            ssh-keygen -t ed25519 -C "openclaw-checkpoint" -f "$SSH_KEY" -N ""
+            echo "   ✅ SSH key generated"
+            SSH_ALREADY_AUTHORIZED=false
+        fi
+        
+        # Only show key setup instructions if not already authorized
+        if [ "$SSH_ALREADY_AUTHORIZED" = false ]; then
+            # Show public key
+            echo ""
+            echo "   Your public key:"
+            echo "   ─────────────────────────────────────────────────────────"
+            cat "${SSH_KEY}.pub"
+            echo "   ─────────────────────────────────────────────────────────"
+            echo ""
+            
+            # Copy to clipboard if possible
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                cat "${SSH_KEY}.pub" | pbcopy
+                echo "   📋 Copied to clipboard!"
+            elif command -v xclip >/dev/null 2>&1; then
+                cat "${SSH_KEY}.pub" | xclip -selection clipboard
+                echo "   📋 Copied to clipboard!"
+            fi
+            
+            # Open GitHub SSH settings
+            echo ""
+            echo "🌐 Opening GitHub SSH settings..."
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                open "https://github.com/settings/ssh/new"
+            elif command -v xdg-open >/dev/null 2>&1; then
+                xdg-open "https://github.com/settings/ssh/new"
+            else
+                echo "   Please open: https://github.com/settings/ssh/new"
+            fi
+            
+            echo ""
+            echo "Instructions:"
+            echo "   1. Title: 'OpenClaw Checkpoint' (or any name)"
+            echo "   2. Key: Paste the public key above (already copied if on macOS)"
+            echo "   3. Click 'Add SSH key'"
+            echo ""
+            read -p "Press Enter when you've added the key to GitHub..."
+        fi
+        
+        # Set remote to SSH URL
+        REMOTE_URL="git@github.com:$GITHUB_USER/$REPO_NAME.git"
+        git remote add origin "$REMOTE_URL" 2>/dev/null || git remote set-url origin "$REMOTE_URL"
+        echo "   ✅ Remote configured: $REMOTE_URL"
+        
+    else
+        # Personal Access Token authentication
+        echo ""
+        echo "🔑 Setting up Personal Access Token..."
+        echo ""
+        
+        # Open browser for token creation
+        echo "🌐 Opening GitHub token creation page..."
+        TOKEN_URL="https://github.com/settings/tokens/new?description=OpenClaw%20Checkpoint&scopes=repo"
+        
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            open "$TOKEN_URL"
+        elif command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "$TOKEN_URL"
+        else
+            echo "   Please open: $TOKEN_URL"
+        fi
+        
+        echo ""
+        echo "Instructions:"
+        echo "   1. Note: 'OpenClaw Checkpoint' (already filled in)"
+        echo "   2. Expiration: 90 days (or no expiration)"
+        echo "   3. Scopes: Check 'repo' (full control)"
+        echo "   4. Click 'Generate token'"
+        echo "   5. COPY the token immediately (you won't see it again)"
+        echo ""
+        read -p "Press Enter when you have your token..."
+        echo ""
+        read -s -p "Paste your GitHub token: " GITHUB_TOKEN
+        echo ""
+        
+        # Store credentials
+        git config --global credential.helper osxkeychain 2>/dev/null || \
+        git config --global credential.helper libsecret 2>/dev/null || \
+        git config --global credential.helper store
+        
+        # Set remote to HTTPS URL
+        REMOTE_URL="https://github.com/$GITHUB_USER/$REPO_NAME.git"
+        git remote add origin "$REMOTE_URL" 2>/dev/null || git remote set-url origin "$REMOTE_URL"
+        echo "   ✅ Remote configured: $REMOTE_URL"
+    fi
+    
+    # Generate README.md for the backup repository
+    echo ""
+    echo "📝 Generating README.md..."
+    cat > "$WORKSPACE_DIR/README.md" << READMEEOF
+# OpenClaw Workspace Backup
+
+This repository is an automated backup of an OpenClaw agent workspace.
+
+## ⚠️ Private Repository
+
+This backup contains sensitive data including:
+- Agent identity and personality (SOUL.md)
+- Long-term memories (MEMORY.md)
+- Personal notes and conversation history
+- Configuration and tools
+
+**Keep this repository PRIVATE.**
+
+## Recovery
+
+To restore this workspace on a new machine:
+
+\`\`\`bash
+# Clone the backup
+git clone git@github.com:$GITHUB_USER/$REPO_NAME.git ~/.openclaw/workspace
+
+# Or use the checkpoint-resume command if you have the skill installed
+checkpoint-resume
+\`\`\`
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| \`checkpoint\` | Create a backup now |
+| \`checkpoint-status\` | Check backup health |
+| \`checkpoint-resume\` | Restore from backup |
+| \`checkpoint-schedule\` | Configure auto-backup frequency |
+| \`checkpoint-reset\` | Reset for fresh setup |
+
+## About OpenClaw
+
+OpenClaw is an AI agent framework. This backup preserves the agent's state,
+memories, and identity across sessions and machines.
+READMEEOF
+    echo "   ✅ README.md created"
+    
+    # Step 4: Test push
+    echo ""
+    echo "☁️  Step 4: Testing connection..."
+    
+    # Stage ALL files and commit (ensure full backup, not just .gitignore)
+    git add -A
+    if ! git diff --cached --quiet 2>/dev/null; then
+        git commit -m "Initial checkpoint: Full workspace backup" --quiet
+    fi
+    
+    # Push to remote
+    if [ "$AUTH_METHOD" = "1" ]; then
+        # SSH push
+        if git push -u origin main --quiet 2>/dev/null || git push -u origin master --quiet 2>/dev/null; then
+            echo "   ✅ Successfully pushed to GitHub"
+        else
+            echo "   ❌ Push failed. Please check your SSH key is added to GitHub."
+            echo "   You can retry with: checkpoint-auth"
+            exit 1
+        fi
+    else
+        # HTTPS push with token
+        if git push "https://$GITHUB_USER:$GITHUB_TOKEN@github.com/$GITHUB_USER/$REPO_NAME.git" main --quiet 2>/dev/null || \
+           git push "https://$GITHUB_USER:$GITHUB_TOKEN@github.com/$GITHUB_USER/$REPO_NAME.git" master --quiet 2>/dev/null; then
+            echo "   ✅ Successfully pushed to GitHub"
+        else
+            echo "   ❌ Push failed. Please check your token and repository."
+            exit 1
+        fi
+        # Clear token from memory
+        unset GITHUB_TOKEN
+    fi
+    
+else
+    # Remote already configured - test connection
+    echo ""
+    echo "☁️  Step 2: Testing connection..."
+    cd "$WORKSPACE_DIR"
+    
+    # Stage ALL files and commit any changes
+    git add -A
+    if ! git diff --cached --quiet 2>/dev/null; then
+        git commit -m "checkpoint: Full workspace backup" --quiet
+    fi
+    
+    # Try to push
+    if git push origin main --quiet 2>/dev/null || git push origin master --quiet 2>/dev/null; then
+        echo "   ✅ Connection verified"
+    else
+        echo "   ⚠️  Could not push to remote. You may need to re-authenticate."
+        echo "   Run: checkpoint-auth"
+    fi
+fi
+
+# Step 5: Set up automated backups
+echo ""
+echo "⏰ Step 5: Configure automatic backups"
+echo ""
+echo "How often should we back up your OpenClaw state?"
+echo ""
+echo "   1) Every 15 minutes (high activity)"
+echo "   2) Every 30 minutes (medium activity)"
+echo "   3) Every hour (recommended)"
+echo "   4) Every 2 hours (low activity)"
+echo "   5) Every 4 hours (minimal activity)"
+echo "   6) Once per day"
+echo "   7) Manual only (no automatic backups)"
+echo ""
+read -p "Choose [1-7, default: 3]: " FREQ_CHOICE
+FREQ_CHOICE=${FREQ_CHOICE:-3}
+
+case "$FREQ_CHOICE" in
+    1) FREQ="15min" ;;
+    2) FREQ="30min" ;;
+    3) FREQ="hourly" ;;
+    4) FREQ="2hours" ;;
+    5) FREQ="4hours" ;;
+    6) FREQ="daily" ;;
+    7) FREQ="disable" ;;
+    *) FREQ="hourly" ;;
+esac
+
+if [ "$FREQ" = "disable" ]; then
+    echo "   ⏭️  Skipping automatic backups (manual only)"
+else
+    "$SCRIPT_DIR/checkpoint-schedule" "$FREQ"
+fi
+
+# Step 6: Test backup
+echo ""
+echo "🧪 Step 6: Testing backup..."
+cd "$WORKSPACE_DIR"
+"$SCRIPT_DIR/checkpoint"
+
+# Step 7: Show status
+echo ""
+echo "📊 Step 7: Setup complete!"
+echo ""
+cd "$WORKSPACE_DIR"
+"$SCRIPT_DIR/checkpoint-status"
+
+echo ""
+echo "=============================="
+echo "✅ OpenClaw Checkpoint is ready!"
+echo ""
+echo "Quick commands:"
+echo "   checkpoint          - Backup now"
+echo "   checkpoint-resume   - Restore on new machine"
+echo "   checkpoint-status   - Check backup health"
+echo "   checkpoint-schedule - Change backup frequency"
+echo "   checkpoint-stop     - Stop automatic backups"
+echo ""
+echo "Your state is now protected. If this machine dies,"
+echo "you can restore everything on a new machine with:"
+echo "   git clone git@github.com:$GITHUB_USER/$REPO_NAME.git ~/.openclaw/workspace"
+echo ""

@@ -1,0 +1,57 @@
+#!/bin/bash
+# checkpoint-resume - Restore OpenClaw state from remote repository
+
+set -e
+
+WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+REMOTE_URL="${CHECKPOINT_REMOTE:-origin}"
+BRANCH="${CHECKPOINT_BRANCH:-main}"
+
+cd "$WORKSPACE_DIR" || {
+    echo "❌ Workspace not found at $WORKSPACE_DIR"
+    exit 1
+}
+
+# Check if git repo exists
+if [ ! -d ".git" ]; then
+    echo "❌ Not a git repository. Run 'checkpoint-init' first."
+    exit 1
+fi
+
+# Fetch latest from remote
+echo "☁️  Fetching latest checkpoint..."
+git fetch "$REMOTE_URL" "$BRANCH" --quiet
+
+# Check if we're behind
+LOCAL=$(git rev-parse @)
+REMOTE=$(git rev-parse "$REMOTE_URL/$BRANCH")
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+    echo "✅ Already up to date"
+    echo "   Commit: $(git rev-parse --short HEAD)"
+    echo "   Time: $(git log -1 --format=%cd --date=iso)"
+    exit 0
+fi
+
+# Check for local changes that would be overwritten
+if ! git diff --quiet HEAD; then
+    echo "⚠️  You have uncommitted changes"
+    echo "   Options:"
+    echo "     1. 'checkpoint' - Save your changes first"
+    echo "     2. 'checkpoint-resume --force' - Discard local changes"
+    exit 1
+fi
+
+# Pull latest
+echo "📥 Restoring checkpoint..."
+if git pull "$REMOTE_URL" "$BRANCH" --quiet; then
+    echo "✅ Checkpoint restored successfully"
+    echo "   Commit: $(git rev-parse --short HEAD)"
+    echo "   Time: $(git log -1 --format=%cd --date=iso)"
+    echo ""
+    echo "📝 Recent changes:"
+    git log --oneline -3 | sed 's/^/   /'
+else
+    echo "❌ Failed to restore checkpoint"
+    exit 1
+fi

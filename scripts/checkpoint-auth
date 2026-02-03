@@ -1,0 +1,228 @@
+#!/bin/bash
+# checkpoint-auth - Authenticate with GitHub (CLI or browser)
+
+set -e
+
+WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+
+echo "🔐 GitHub Authentication"
+echo "======================="
+echo ""
+
+# Check if already authenticated
+cd "$WORKSPACE_DIR" 2>/dev/null || true
+
+if git config --get remote.origin.url >/dev/null 2>&1; then
+    REMOTE=$(git config --get remote.origin.url)
+    # Test if we can push (auth check)
+    if git ls-remote "$REMOTE" HEAD >/dev/null 2>&1; then
+        echo "✅ Already authenticated with GitHub"
+        echo "   Remote: $REMOTE"
+        exit 0
+    fi
+fi
+
+echo "Choose authentication method:"
+echo ""
+echo "1) GitHub CLI (easiest - opens browser automatically)"
+echo "2) Personal Access Token (manual copy/paste)"
+echo "3) SSH Key (advanced)"
+echo ""
+read -p "Choose [1-3, default: 1]: " AUTH_METHOD
+AUTH_METHOD=${AUTH_METHOD:-1}
+
+case "$AUTH_METHOD" in
+    1)
+        echo ""
+        echo "📦 Checking for GitHub CLI..."
+        
+        if ! command -v gh >/dev/null 2>&1; then
+            echo "   GitHub CLI not installed."
+            echo ""
+            read -p "Install GitHub CLI? [Y/n]: " INSTALL_GH
+            INSTALL_GH=${INSTALL_GH:-Y}
+            
+            if [[ "$INSTALL_GH" =~ ^[Yy]$ ]]; then
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    echo "   Installing via Homebrew..."
+                    brew install gh
+                elif command -v apt-get >/dev/null 2>&1; then
+                    echo "   Installing via apt..."
+                    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+                    sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+                    sudo apt update
+                    sudo apt install gh -y
+                else
+                    echo "   Please install GitHub CLI manually:"
+                    echo "   https://github.com/cli/cli#installation"
+                    exit 1
+                fi
+            else
+                echo "   Falling back to Personal Access Token method..."
+                AUTH_METHOD=2
+            fi
+        fi
+        
+        if [ "$AUTH_METHOD" = "1" ] && command -v gh >/dev/null 2>&1; then
+            echo ""
+            echo "🌐 Opening browser for GitHub authentication..."
+            echo "   (If browser doesn't open, visit: https://github.com/login/device)"
+            echo ""
+            
+            # Authenticate with gh
+            if gh auth status >/dev/null 2>&1; then
+                echo "   ✅ Already logged in to GitHub CLI"
+            else
+                gh auth login --git-protocol https --web
+            fi
+            
+            # Now configure git to use gh as credential helper
+            gh auth setup-git
+            
+            echo ""
+            echo "✅ Authenticated with GitHub CLI"
+        fi
+        ;;
+        
+    2)
+        echo ""
+        echo "🔑 Personal Access Token Setup"
+        echo ""
+        echo "Opening browser to GitHub token creation page..."
+        
+        # Open browser
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            open "https://github.com/settings/tokens/new?description=OpenClaw%20Checkpoint&scopes=repo"
+        elif command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "https://github.com/settings/tokens/new?description=OpenClaw%20Checkpoint&scopes=repo"
+        else
+            echo "   Please open this URL in your browser:"
+            echo "   https://github.com/settings/tokens/new?description=OpenClaw%20Checkpoint&scopes=repo"
+        fi
+        
+        echo ""
+        echo "Instructions:"
+        echo "   1. Note: 'OpenClaw Checkpoint'"
+        echo "   2. Expiration: 90 days (or no expiration)"
+        echo "   3. Scopes: Check 'repo' (full control)"
+        echo "   4. Click 'Generate token'"
+        echo "   5. COPY the token (you won't see it again!)"
+        echo ""
+        read -p "Press Enter when you have your token..."
+        echo ""
+        read -s -p "Paste your GitHub token: " GITHUB_TOKEN
+        echo ""
+        
+        # Store in git credential helper
+        git config --global credential.helper osxkeychain 2>/dev/null || \
+        git config --global credential.helper libsecret 2>/dev/null || \
+        git config --global credential.helper store
+        
+        echo ""
+        echo "✅ Token configured"
+        unset GITHUB_TOKEN
+        ;;
+        
+    3)
+        echo ""
+        echo "🔐 SSH Key Setup"
+        echo ""
+        
+        # Ensure .ssh directory exists with proper permissions
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Add GitHub to known_hosts if not already there
+        if ! grep -q "github.com" ~/.ssh/known_hosts 2>/dev/null; then
+            echo "   Adding GitHub to known hosts..."
+            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+            chmod 600 ~/.ssh/known_hosts
+        fi
+        
+        # Check for existing SSH key or generate new one
+        SSH_KEY="$HOME/.ssh/id_ed25519"
+        
+        if [ -f "$SSH_KEY" ]; then
+            echo "   ✅ Using existing SSH key: $SSH_KEY"
+        else
+            echo "   Generating new SSH key..."
+            ssh-keygen -t ed25519 -C "openclaw-checkpoint" -f "$SSH_KEY" -N ""
+            echo "   ✅ Key generated: $SSH_KEY"
+        fi
+        
+        # Show public key
+        echo ""
+        echo "   Public key (copy this to GitHub):"
+        echo "   ─────────────────────────────────────────────────────────"
+        cat "${SSH_KEY}.pub"
+        echo "   ─────────────────────────────────────────────────────────"
+        
+        # Copy to clipboard if possible
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            cat "${SSH_KEY}.pub" | pbcopy
+            echo "   📋 Copied to clipboard!"
+        elif command -v xclip >/dev/null 2>&1; then
+            cat "${SSH_KEY}.pub" | xclip -selection clipboard
+            echo "   📋 Copied to clipboard!"
+        fi
+        
+        # Open GitHub SSH settings
+        echo ""
+        echo "🌐 Opening GitHub SSH settings..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            open "https://github.com/settings/ssh/new"
+        elif command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "https://github.com/settings/ssh/new"
+        else
+            echo "   Please open: https://github.com/settings/ssh/new"
+        fi
+        
+        echo ""
+        echo "Instructions:"
+        echo "   1. Title: 'OpenClaw Checkpoint' (or any name)"
+        echo "   2. Key: Paste the public key above (already copied if on macOS)"
+        echo "   3. Click 'Add SSH key'"
+        echo ""
+        read -p "Press Enter when you've added the key to GitHub..."
+        
+        # Configure git to use SSH
+        cd "$WORKSPACE_DIR" 2>/dev/null || true
+        if git remote get-url origin >/dev/null 2>&1; then
+            HTTPS_URL=$(git remote get-url origin)
+            # Convert HTTPS to SSH if needed
+            if [[ "$HTTPS_URL" == https://* ]]; then
+                SSH_URL=$(echo "$HTTPS_URL" | sed 's|https://github.com/|git@github.com:|')
+                git remote set-url origin "$SSH_URL"
+                echo "   ✅ Remote updated to use SSH: $SSH_URL"
+            else
+                echo "   ✅ Remote already using SSH"
+            fi
+        fi
+        
+        echo "   ✅ SSH authentication configured"
+        ;;
+        
+    *)
+        echo "❌ Invalid option"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo "🧪 Testing authentication..."
+
+# Test with a simple fetch
+cd "$WORKSPACE_DIR" 2>/dev/null || {
+    echo "❌ Workspace not found"
+    exit 1
+}
+
+if git fetch origin --dry-run 2>/dev/null || git ls-remote origin HEAD >/dev/null 2>&1; then
+    echo "✅ Authentication successful!"
+    echo "   You can now use: checkpoint, checkpoint-resume, etc."
+else
+    echo "⚠️  Could not verify authentication"
+    echo "   You may need to try again or check your credentials"
+    exit 1
+fi
