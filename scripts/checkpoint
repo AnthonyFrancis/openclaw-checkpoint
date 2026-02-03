@@ -6,7 +6,7 @@ set -e
 WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
 REMOTE_URL="${CHECKPOINT_REMOTE:-origin}"
 BRANCH="${CHECKPOINT_BRANCH:-main}"
-LOCK_FILE="$WORKSPACE_DIR/.git/checkpoint.lock"
+LOCK_DIR="$WORKSPACE_DIR/.git/checkpoint.lock"
 
 cd "$WORKSPACE_DIR" || {
     echo "❌ Workspace not found at $WORKSPACE_DIR"
@@ -19,11 +19,27 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
-# Prevent concurrent runs with flock
-exec 200>"$LOCK_FILE"
-if ! flock -n 200; then
-    echo "⏳ Another checkpoint is already running, skipping"
-    exit 0
+# Prevent concurrent runs using mkdir (atomic on all platforms)
+cleanup_lock() {
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+trap cleanup_lock EXIT
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # Check if lock is stale (older than 5 minutes)
+    if [[ "$OSTYPE" == darwin* ]]; then
+        LOCK_AGE=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ))
+    else
+        LOCK_AGE=$(( $(date +%s) - $(stat -c %Y "$LOCK_DIR" 2>/dev/null || echo 0) ))
+    fi
+    if [ "$LOCK_AGE" -gt 300 ]; then
+        echo "🔓 Removing stale lock (${LOCK_AGE}s old)"
+        rmdir "$LOCK_DIR" 2>/dev/null || true
+        mkdir "$LOCK_DIR" 2>/dev/null || { echo "⏳ Another checkpoint is running, skipping"; exit 0; }
+    else
+        echo "⏳ Another checkpoint is already running, skipping"
+        exit 0
+    fi
 fi
 
 # Check if there are changes (staged, unstaged, or untracked)
