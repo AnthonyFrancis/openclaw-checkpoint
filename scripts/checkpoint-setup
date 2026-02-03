@@ -63,7 +63,7 @@ if [ "$HAS_REMOTE" = false ]; then
     
     # Get GitHub username and repo
     read -p "Enter your GitHub username: " GITHUB_USER
-    read -p "Enter your repository name [openclaw-state]: " REPO_NAME
+    read -p "Enter your repository name (press Enter for openclaw-state): " REPO_NAME
     REPO_NAME=${REPO_NAME:-openclaw-state}
     
     # Step 3: Choose authentication method
@@ -136,8 +136,10 @@ if [ "$HAS_REMOTE" = false ]; then
                 echo "   📋 Copied to clipboard!"
             fi
             
-            # Open GitHub SSH settings
             echo ""
+            echo "   On the next page you'll paste this key, give it a title, and click 'Add SSH key'."
+            echo ""
+            read -p "Press Enter to open the Add new SSH key page..."
             echo "🌐 Opening GitHub SSH settings..."
             if [[ "$OSTYPE" == "darwin"* ]]; then
                 open "https://github.com/settings/ssh/new"
