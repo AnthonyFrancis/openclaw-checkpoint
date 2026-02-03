@@ -50,7 +50,7 @@ if [ "$FREQUENCY" = "disable" ]; then
     crontab -l 2>/dev/null | grep -v "openclaw-checkpoint" | crontab - 2>/dev/null || true
     
     # Remove launchd plist on macOS
-    if [ "$OSTYPE" = "darwin"* ]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
         PLIST="$HOME/Library/LaunchAgents/com.openclaw.checkpoint.plist"
         if [ -f "$PLIST" ]; then
             launchctl unload "$PLIST" 2>/dev/null || true
@@ -78,7 +78,7 @@ esac
 mkdir -p "$HOME/.openclaw/logs"
 
 # Setup based on OS
-if [ "$OSTYPE" = "darwin"* ]; then
+if [[ "$OSTYPE" == darwin* ]]; then
     # macOS - use launchd (more reliable when sleeping)
     echo "🍎 Configuring for macOS (launchd)..."
     

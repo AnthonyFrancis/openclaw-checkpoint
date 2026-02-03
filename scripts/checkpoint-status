@@ -75,7 +75,7 @@ echo ""
 
 # Auto-backup schedule
 echo "⏰ Auto-Backup Schedule:"
-if [ "$OSTYPE" = "darwin"* ]; then
+if [[ "$OSTYPE" == darwin* ]]; then
     # macOS - check launchd
     PLIST="$HOME/Library/LaunchAgents/com.openclaw.checkpoint.plist"
     if [ -f "$PLIST" ]; then
