@@ -1,4 +1,4 @@
-# OpenClaw Checkpoint - Backup
+# OpenClaw Checkpoint - Personal AI Assistant Backup & Recovery
 
 > Backup and disaster recovery for [OpenClaw](https://github.com/openclaw/openclaw) workspaces
 
