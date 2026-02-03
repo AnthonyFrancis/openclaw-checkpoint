@@ -66,9 +66,8 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Skills (installed to ~/.openclaw/skills/, scripts copied to tools/)
-# Prevents "embedded git repository" warnings from cloned skills
-skills/
+# Nested git repos (add any skill folders that are their own git repos here)
+# Example: skills/some-cloned-skill/
 EOF
 
 # Create initial commit with ALL files
