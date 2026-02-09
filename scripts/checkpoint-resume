@@ -9,6 +9,158 @@ BRANCH="${CHECKPOINT_BRANCH:-main}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ===========================================================================
+# CRON JOB RESTORE
+# Restore OpenClaw cron jobs from backup file after workspace restore
+# Reads memory/cron-jobs-backup.json and calls `openclaw cron add` per job
+# ===========================================================================
+restore_cron_jobs() {
+    local BACKUP_FILE="$WORKSPACE_DIR/memory/cron-jobs-backup.json"
+
+    if [ ! -f "$BACKUP_FILE" ]; then
+        return 0
+    fi
+
+    # Check if openclaw CLI is available
+    if ! command -v openclaw >/dev/null 2>&1; then
+        echo ""
+        echo "   ℹ️  Cron job backup found but OpenClaw CLI not available."
+        echo "      Start the gateway first, then run: checkpoint-resume"
+        return 0
+    fi
+
+    # Count jobs in backup
+    local JOB_COUNT
+    JOB_COUNT=$(python3 -c "import json; print(len(json.load(open('$BACKUP_FILE')).get('jobs',[])))" 2>/dev/null || echo "0")
+
+    if [ "$JOB_COUNT" -eq 0 ]; then
+        return 0
+    fi
+
+    echo ""
+    echo "🔄 Cron Job Restore"
+    echo "─────────────────────────────────────────"
+    echo "   Found $JOB_COUNT cron jobs in backup"
+    echo ""
+
+    read -p "   Restore $JOB_COUNT cron jobs to OpenClaw? [Y/n]: " RESTORE_CRONS
+    RESTORE_CRONS=${RESTORE_CRONS:-Y}
+
+    if [[ ! "$RESTORE_CRONS" =~ ^[Yy]$ ]]; then
+        echo "   Skipped. Restore later with: checkpoint-resume"
+        return 0
+    fi
+
+    echo ""
+    echo "   Restoring cron jobs..."
+
+    # Write the Python restore script to a temp file to avoid heredoc quoting issues
+    local TEMP_SCRIPT
+    TEMP_SCRIPT=$(mktemp /tmp/restore_cron_XXXXXX.py)
+
+    cat > "$TEMP_SCRIPT" << 'PYEOF'
+import json, subprocess, sys
+
+backup_path = sys.argv[1]
+
+with open(backup_path, 'r') as f:
+    data = json.load(f)
+
+jobs = data.get('jobs', [])
+restored = skipped = failed = 0
+
+for job in jobs:
+    name = job.get('name', 'Unnamed')
+    schedule = job.get('schedule', {})
+    payload = job.get('payload', {})
+
+    print(f"   • {name}...", end=" ", flush=True)
+
+    cmd = ['openclaw', 'cron', 'add']
+
+    # Name
+    if name:
+        cmd += ['--name', name]
+
+    # Schedule
+    if schedule.get('kind') == 'cron' and schedule.get('expr'):
+        cmd += ['--cron', schedule['expr']]
+        if schedule.get('tz'):
+            cmd += ['--tz', schedule['tz']]
+    elif schedule.get('kind') == 'every' and schedule.get('interval'):
+        cmd += ['--every', schedule['interval']]
+    else:
+        print("skipped (no schedule)")
+        skipped += 1
+        continue
+
+    # Session & wake
+    cmd += ['--session', job.get('sessionTarget', 'isolated')]
+    cmd += ['--wake', job.get('wakeMode', 'now')]
+    cmd += ['--agent', job.get('agentId', 'main')]
+
+    # Model
+    model = job.get('model') or payload.get('model')
+    if model:
+        cmd += ['--model', model]
+
+    # Payload
+    if payload.get('message'):
+        cmd += ['--message', payload['message']]
+    if payload.get('systemEvent'):
+        cmd += ['--system-event', payload['systemEvent']]
+    if payload.get('timeoutSeconds'):
+        cmd += ['--timeout-seconds', str(payload['timeoutSeconds'])]
+    if payload.get('thinking'):
+        cmd += ['--thinking', payload['thinking']]
+
+    # Delivery
+    delivery = job.get('delivery', {})
+    mode = delivery.get('mode', '')
+    if mode == 'none':
+        cmd += ['--no-deliver']
+    elif mode == 'announce' or delivery.get('announce'):
+        cmd += ['--announce']
+        if delivery.get('channel'):
+            cmd += ['--channel', delivery['channel']]
+        if delivery.get('to'):
+            cmd += ['--to', str(delivery['to'])]
+
+    # Disabled
+    if not job.get('enabled', True):
+        cmd += ['--disabled']
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            print("restored")
+            restored += 1
+        else:
+            err = (result.stderr.strip() or result.stdout.strip())[:80]
+            print(f"failed ({err})")
+            failed += 1
+    except subprocess.TimeoutExpired:
+        print("timed out")
+        failed += 1
+    except Exception as e:
+        print(f"error ({e})")
+        failed += 1
+
+print()
+parts = [f"   ✅ Restored {restored} cron jobs"]
+if skipped:
+    parts.append(f"skipped {skipped}")
+if failed:
+    parts.append(f"{failed} failed")
+print(", ".join(parts))
+PYEOF
+
+    python3 "$TEMP_SCRIPT" "$BACKUP_FILE"
+    local EXIT_CODE=$?
+    rm -f "$TEMP_SCRIPT"
+    return $EXIT_CODE
+}
+
+# ===========================================================================
 # RESTORE ONBOARDING FLOW
 # Triggered when no remote is configured (first-time restore scenario)
 # ===========================================================================
@@ -194,6 +346,10 @@ restore_onboarding() {
     echo "=============================="
     echo "🎉 Your OpenClaw state has been restored!"
     echo ""
+
+    # Offer to restore cron jobs
+    restore_cron_jobs
+
     echo "   Next steps:"
     echo "   • Restore your API keys (they're not backed up for security)"
     echo "   • Run 'checkpoint-schedule hourly' to enable automatic backups"
@@ -554,6 +710,9 @@ if git pull "$REMOTE_URL" "$BRANCH" --quiet; then
     echo ""
     echo "📝 Recent changes:"
     git log --oneline -3 | sed 's/^/   /'
+
+    # Offer to restore cron jobs if backup exists
+    restore_cron_jobs
 else
     echo "❌ Failed to restore checkpoint"
     exit 1
