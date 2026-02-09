@@ -761,7 +761,7 @@ fi
 if ! git diff --quiet HEAD; then
     echo "⚠️  You have uncommitted changes"
     echo "   Options:"
-    echo "     1. 'checkpoint' - Save your changes first"
+    echo "     1. 'checkpoint-backup' - Save your changes first"
     echo "     2. 'checkpoint-resume --force' - Discard local changes"
     exit 1
 fi

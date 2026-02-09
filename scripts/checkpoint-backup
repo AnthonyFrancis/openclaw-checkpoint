@@ -1,5 +1,5 @@
 #!/bin/bash
-# checkpoint - Save OpenClaw state to remote repository
+# checkpoint-backup - Save OpenClaw state to remote repository
 
 set -e
 

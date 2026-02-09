@@ -45,7 +45,7 @@ git remote add origin https://github.com/YOURGITHUBUSERNAME/openclaw-state.git
 # origin  https://github.com/YOURUSERNAME/openclaw-state.git (push)
 
 # Push initial checkpoint
-checkpoint
+checkpoint-backup
 
 # Output:
 # 💾 Saving checkpoint...
@@ -62,7 +62,7 @@ checkpoint
 crontab -e
 
 # Add this line for hourly backups:
-0 * * * * /Users/$(whoami)/.openclaw/workspace/skills/openclaw-checkpoint/scripts/checkpoint >> /tmp/openclaw-backup.log 2>&1
+0 * * * * /Users/$(whoami)/.openclaw/workspace/skills/openclaw-checkpoint/scripts/checkpoint-backup >> /tmp/openclaw-backup.log 2>&1
 
 # Or use launchd on macOS (more reliable when sleeping)
 # Create ~/Library/LaunchAgents/com.openclaw.checkpoint.plist
@@ -77,7 +77,7 @@ Before relying on this, test restoring:
 echo "Test: I love testing backups" >> ~/.openclaw/workspace/MEMORY.md
 
 # Checkpoint
-checkpoint
+checkpoint-backup
 
 # Clone to temporary location to simulate new machine
 git clone https://github.com/YOURUSERNAME/openclaw-state.git /tmp/openclaw-test

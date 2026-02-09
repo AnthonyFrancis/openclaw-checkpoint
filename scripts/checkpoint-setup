@@ -239,7 +239,7 @@ checkpoint-resume
 
 | Command | Description |
 |---------|-------------|
-| \`checkpoint\` | Create a backup now |
+| \`checkpoint-backup\` | Create a backup now |
 | \`checkpoint-status\` | Check backup health |
 | \`checkpoint-resume\` | Restore from backup |
 | \`checkpoint-schedule\` | Configure auto-backup frequency |
@@ -433,7 +433,7 @@ fi
 echo ""
 echo "🧪 Step 6: Testing backup..."
 cd "$WORKSPACE_DIR"
-"$SCRIPT_DIR/checkpoint"
+"$SCRIPT_DIR/checkpoint-backup"
 
 # Step 7: Show status
 echo ""

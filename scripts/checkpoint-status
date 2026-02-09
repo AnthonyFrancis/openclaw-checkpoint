@@ -66,7 +66,7 @@ echo "📝 Local Changes:"
 if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
     CHANGED=$(git status --short | wc -l)
     echo "   ⚠️  $CHANGED file(s) with uncommitted changes"
-    echo "      Run: checkpoint"
+    echo "      Run: checkpoint-backup"
 else
     echo "   ✅ No uncommitted changes"
 fi
@@ -127,7 +127,7 @@ fi
 echo ""
 echo "=============================="
 echo "💡 Quick Actions:"
-echo "   checkpoint                  - Backup now"
+echo "   checkpoint-backup           - Backup now"
 echo "   checkpoint-resume           - Restore from remote"
 echo "   checkpoint-auth             - Fix authentication issues"
 echo "   checkpoint-schedule hourly  - Set auto-backup (or 15min, 30min, daily, etc.)"
