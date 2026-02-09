@@ -62,6 +62,22 @@ import json, subprocess, sys
 
 backup_path = sys.argv[1]
 
+# Detect which delivery flags the CLI supports (varies by version)
+try:
+    help_out = subprocess.run(
+        ['openclaw', 'cron', 'add', '--help'],
+        capture_output=True, text=True, timeout=15
+    ).stdout + subprocess.run(
+        ['openclaw', 'cron', 'add', '--help'],
+        capture_output=True, text=True, timeout=15
+    ).stderr
+except Exception:
+    help_out = ''
+
+has_announce = '--announce' in help_out
+has_no_deliver = '--no-deliver' in help_out
+has_deliver = '--deliver' in help_out and not has_announce  # old-style flag
+
 with open(backup_path, 'r') as f:
     data = json.load(f)
 
@@ -113,13 +129,20 @@ for job in jobs:
     if payload.get('thinking'):
         cmd += ['--thinking', payload['thinking']]
 
-    # Delivery
+    # Delivery - handle both old and new CLI versions
+    # New CLI (2026.2.6+): --announce, --no-deliver
+    # Old CLI: --deliver (no --announce or --no-deliver)
     delivery = job.get('delivery', {})
     mode = delivery.get('mode', '')
     if mode == 'none':
-        cmd += ['--no-deliver']
+        if has_no_deliver:
+            cmd += ['--no-deliver']
+        # Old CLI: omitting delivery flags = no delivery (default)
     elif mode == 'announce' or delivery.get('announce'):
-        cmd += ['--announce']
+        if has_announce:
+            cmd += ['--announce']
+        elif has_deliver:
+            cmd += ['--deliver']
         if delivery.get('channel'):
             cmd += ['--channel', delivery['channel']]
         if delivery.get('to'):
