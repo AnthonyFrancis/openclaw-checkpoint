@@ -17,6 +17,7 @@ Automatically sync your OpenClaw agent's identity, memory, and configuration to 
 | ✅ MEMORY.md, memory/*.md | ❌ OAuth tokens |
 | ✅ TOOLS.md, AGENTS.md, HEARTBEAT.md | ❌ Credentials |
 | ✅ Custom scripts and tools | ❌ Temporary files |
+| ✅ Cron jobs (memory/cron-jobs-backup.json) | |
 
 ## Quick Start
 
@@ -94,9 +95,12 @@ git clone git@github.com:YOURUSER/openclaw-state.git ~/.openclaw/workspace
 
 # 3. Start OpenClaw
 openclaw gateway start
+
+# 4. Restore your cron jobs
+openclaw cron restore ~/.openclaw/workspace/memory/cron-jobs-backup.json
 ```
 
-Your agent will remember everything up to the last checkpoint.
+Your agent will remember everything up to the last checkpoint, including scheduled tasks.
 
 ## ⚠️ Security: Use a PRIVATE Repository
 
@@ -114,10 +118,31 @@ Your backup contains personal data:
 - SSH key or GitHub Personal Access Token
 - A **private** GitHub repository for storing backups
 
+## Cron Job Backup & Restore
+
+Each time you run `checkpoint`, your OpenClaw cron jobs are automatically exported to `memory/cron-jobs-backup.json`. This means your scheduled tasks (morning briefs, daily syncs, automated workflows, etc.) are preserved alongside your workspace.
+
+**Backup** happens automatically -- no extra steps needed. The checkpoint command calls `openclaw cron list --json`, cleans the output to keep only configuration (not runtime state), and saves it to the backup file.
+
+**Restore** after disaster recovery:
+
+```bash
+# After restoring your workspace with checkpoint-resume, re-create your cron jobs:
+openclaw cron restore memory/cron-jobs-backup.json
+
+# Or manually inspect the backup and recreate jobs:
+cat ~/.openclaw/workspace/memory/cron-jobs-backup.json
+```
+
+**Requirements:**
+- The `openclaw` CLI must be available on PATH
+- The OpenClaw gateway must be running for backup to succeed
+- If either is unavailable, checkpoint continues without cron backup (non-blocking)
+
 ## How It Works
 
 1. **checkpoint-init** creates a git repo in `~/.openclaw/workspace`
-2. **checkpoint** commits and pushes changes to GitHub
+2. **checkpoint** exports cron jobs to JSON, then commits and pushes changes to GitHub
 3. **checkpoint-schedule** sets up cron (Linux) or launchd (macOS) for auto-backups
 4. **checkpoint-resume** pulls the latest backup from GitHub
 

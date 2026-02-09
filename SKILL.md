@@ -1,6 +1,6 @@
 ---
 name: openclaw-checkpoint
-description: Backup and restore OpenClaw workspace state across machines using git. Enables disaster recovery by syncing SOUL.md, MEMORY.md, memory files, and configuration to a remote repository. Use when user wants to checkpoint their OpenClaw state, restore on a new machine, migrate between computers, or protect against data loss. Provides commands checkpoint-setup (interactive onboarding), checkpoint, checkpoint-resume, checkpoint-schedule (auto-backup), checkpoint-stop, checkpoint-status, checkpoint-init, and checkpoint-reset.
+description: Backup and restore OpenClaw workspace state across machines using git. Enables disaster recovery by syncing SOUL.md, MEMORY.md, memory files, cron jobs, and configuration to a remote repository. Use when user wants to checkpoint their OpenClaw state, restore on a new machine, migrate between computers, or protect against data loss. Provides commands checkpoint-setup (interactive onboarding), checkpoint, checkpoint-resume, checkpoint-schedule (auto-backup), checkpoint-stop, checkpoint-status, checkpoint-init, and checkpoint-reset. Automatically backs up cron jobs to memory/cron-jobs-backup.json on each checkpoint.
 ---
 
 # OpenClaw Checkpoint Skill
@@ -15,6 +15,7 @@ This skill provides disaster recovery for OpenClaw by syncing your workspace to 
 
 - **Identity**: SOUL.md, IDENTITY.md, USER.md (who you and the assistant are)
 - **Memory**: MEMORY.md and memory/*.md files (conversation history and context)
+- **Cron Jobs**: Scheduled tasks exported to memory/cron-jobs-backup.json (morning briefs, daily syncs, automations)
 - **Configuration**: TOOLS.md, AGENTS.md, HEARTBEAT.md (tool setups and conventions)
 - **Scripts**: Custom tools and automation you've built
 
@@ -108,9 +109,15 @@ checkpoint
 ```
 
 **What it does:**
+- Backs up OpenClaw cron jobs to `memory/cron-jobs-backup.json` (requires `openclaw` CLI and running gateway)
 - Commits all changes in ~/.openclaw/workspace
 - Pushes to origin/main
 - Shows commit hash and timestamp
+
+**Cron job backup details:**
+- Runs `openclaw cron list --json` to export all scheduled tasks
+- Strips runtime state, keeps only configuration (name, schedule, target, payload)
+- Non-blocking: if the CLI or gateway is unavailable, checkpoint continues without cron backup
 
 **When to use:**
 - Before switching computers
@@ -174,6 +181,11 @@ checkpoint-resume --force  # Discard local changes, pull remote
   - Verifies access and restores your checkpoint
   - Handles merge/replace options if local files exist
 - **Returning users:** Fetches and pulls latest changes from remote
+
+**After restoring, re-create cron jobs from the backup:**
+```bash
+openclaw cron restore memory/cron-jobs-backup.json
+```
 
 **When to use:**
 - Starting OpenClaw on a new machine
@@ -360,15 +372,18 @@ cat > ~/.openclaw/workspace/.env.thisweek << 'EOF'
 THISWEEK_API_KEY=your_key_here
 EOF
 
-# 4. Enable automatic backups on this machine
-checkpoint-schedule hourly
-
-# 5. Start OpenClaw
+# 4. Start OpenClaw
 openclaw gateway start
 
-# 6. Verify
+# 5. Restore your cron jobs (scheduled tasks)
+openclaw cron restore ~/.openclaw/workspace/memory/cron-jobs-backup.json
+
+# 6. Enable automatic backups on this machine
+checkpoint-schedule hourly
+
+# 7. Verify
 # Ask assistant: "What were we working on?"
-# Should recall everything up to last checkpoint
+# Should recall everything up to last checkpoint, with all scheduled tasks restored
 ```
 
 ## Security Considerations
@@ -385,6 +400,7 @@ Your backup contains sensitive personal data:
 **What gets backed up:**
 - ✅ Memory files (conversation history)
 - ✅ Identity files (SOUL.md, etc.)
+- ✅ Cron jobs (memory/cron-jobs-backup.json)
 - ✅ Scripts and tools
 - ✅ Configuration
 
