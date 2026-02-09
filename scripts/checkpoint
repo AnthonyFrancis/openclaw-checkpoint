@@ -19,6 +19,87 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
+# ===========================================================================
+# CRON JOB BACKUP
+# Export OpenClaw cron jobs to JSON for restoration on new machines
+# ===========================================================================
+backup_cron_jobs() {
+    local BACKUP_FILE="$WORKSPACE_DIR/memory/cron-jobs-backup.json"
+
+    # Ensure memory directory exists
+    mkdir -p "$WORKSPACE_DIR/memory"
+
+    # Check if openclaw CLI is available
+    if ! command -v openclaw >/dev/null 2>&1; then
+        echo "⚠️  OpenClaw CLI not available, skipping cron job backup"
+        return 0
+    fi
+
+    # Try to get cron jobs
+    echo "💾 Backing up cron jobs..."
+
+    # Use a temporary file to capture output
+    TEMP_BACKUP=$(mktemp)
+
+    if openclaw cron list --json 2>/dev/null > "$TEMP_BACKUP"; then
+        # Check if we got valid JSON with jobs
+        if python3 -c "import json,sys; d=json.load(open('$TEMP_BACKUP')); sys.exit(0 if 'jobs' in d else 1)" 2>/dev/null; then
+            # Clean up the backup (remove runtime state, keep config)
+            python3 << PYTHON_EOF
+import json
+import sys
+from datetime import datetime
+
+try:
+    with open('$TEMP_BACKUP', 'r') as f:
+        data = json.load(f)
+
+    jobs = data.get('jobs', [])
+    clean_jobs = []
+
+    for job in jobs:
+        clean_job = {
+            'name': job.get('name'),
+            'enabled': job.get('enabled', True),
+            'schedule': job.get('schedule'),
+            'sessionTarget': job.get('sessionTarget'),
+            'wakeMode': job.get('wakeMode'),
+            'payload': job.get('payload'),
+            'agentId': job.get('agentId', 'main'),
+        }
+        if job.get('delivery'):
+            clean_job['delivery'] = job['delivery']
+        if job.get('payload', {}).get('model'):
+            clean_job['model'] = job['payload']['model']
+        clean_jobs.append(clean_job)
+
+    backup_data = {
+        'exported_at': datetime.now().isoformat(),
+        'total_jobs': len(clean_jobs),
+        'jobs': clean_jobs
+    }
+
+    with open('$BACKUP_FILE', 'w') as f:
+        json.dump(backup_data, f, indent=2)
+
+    print(f"   ✅ Backed up {len(clean_jobs)} cron jobs")
+except Exception as e:
+    print(f"   ⚠️  Cron backup failed: {e}")
+    sys.exit(1)
+PYTHON_EOF
+        else
+            echo "   ⚠️  No cron jobs found or invalid response"
+        fi
+    else
+        echo "   ⚠️  Could not fetch cron jobs (gateway may not be running)"
+    fi
+
+    rm -f "$TEMP_BACKUP"
+}
+
+# Backup cron jobs before committing
+backup_cron_jobs
+
 # Prevent concurrent runs using mkdir (atomic on all platforms)
 cleanup_lock() {
     rmdir "$LOCK_DIR" 2>/dev/null || true
