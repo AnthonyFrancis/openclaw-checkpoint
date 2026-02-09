@@ -53,3 +53,8 @@ read -p "Run setup now? [Y/n]: " RUN
 if [[ "${RUN:-Y}" =~ ^[Yy]$ ]]; then
     checkpoint-setup
 fi
+
+# Reload shell so PATH changes take effect immediately
+echo ""
+echo "🔄 Reloading shell to apply PATH changes..."
+exec "$SHELL" -l

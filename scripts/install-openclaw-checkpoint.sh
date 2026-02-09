@@ -100,9 +100,6 @@ echo ""
 echo "🚀 Next step: Run the setup wizard"
 echo "   checkpoint-setup"
 echo ""
-echo "Note: Open a new terminal or run 'source ~/.zshrc' (or ~/.bashrc)"
-echo "      to use commands without full path in current session."
-echo ""
 
 # Ask to run setup now
 read -p "Run setup wizard now? [Y/n]: " RUN_SETUP
@@ -112,3 +109,10 @@ if [[ "${RUN_SETUP}" =~ ^[Yy]$ ]]; then
     echo ""
     checkpoint-setup
 fi
+
+# Reload shell so PATH changes take effect immediately
+# This replaces the current process with a fresh login shell
+# so the user doesn't need to manually run 'source ~/.zshrc'
+echo ""
+echo "🔄 Reloading shell to apply PATH changes..."
+exec "$SHELL" -l
