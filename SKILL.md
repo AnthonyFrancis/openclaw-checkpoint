@@ -47,7 +47,7 @@ checkpoint-setup
 curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
 ```
 
-This runs the [install script](scripts/install-openclaw-checkpoint.sh) -- review it first if you prefer to inspect before executing.
+This runs the install script -- review it first if you prefer to inspect before executing.
 
 ## Commands
 
