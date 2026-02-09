@@ -23,18 +23,7 @@ This skill provides disaster recovery for OpenClaw by syncing your workspace to 
 
 ## Installation
 
-### Option 1: One-Liner Install (Recommended)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
-```
-
-This will:
-- Download and install the skill
-- Add commands to your PATH automatically
-- Offer to run the interactive setup wizard
-
-### Option 2: Manual Install
+### Option 1: Git Clone (Recommended)
 
 ```bash
 # Clone the skill repo
@@ -52,6 +41,14 @@ export PATH="${HOME}/.openclaw/workspace/tools:${PATH}"
 checkpoint-setup
 ```
 
+### Option 2: Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
+```
+
+This runs the [install script](scripts/install-openclaw-checkpoint.sh) -- review it first if you prefer to inspect before executing.
+
 ## Commands
 
 ### checkpoint-setup
@@ -66,7 +63,7 @@ checkpoint-setup
 - Sets up SSH authentication (recommended) or Personal Access Token
 - Automatically detects if SSH key is already authorized on GitHub
 - Generates a README.md with recovery instructions and commands
-- Commits ALL workspace files (not just .gitignore)
+- Commits workspace files within `~/.openclaw/workspace` (secrets excluded via .gitignore)
 - Configures automatic backups
 - Tests the backup system
 - Shows final status
@@ -416,6 +413,19 @@ Your backup contains sensitive personal data:
 - Store API keys in password manager, not in backed-up files
 - Enable 2FA on GitHub account
 - Consider encrypting sensitive notes before adding to memory
+
+### Permissions and Scheduling
+
+This skill uses standard system scheduling to automate backups:
+
+- **macOS**: Creates a launchd plist at `~/Library/LaunchAgents/com.openclaw.checkpoint.plist`
+- **Linux**: Adds a user-level cron job (visible via `crontab -l`)
+
+Auto-backup is **opt-in only** -- it is never enabled unless you explicitly run `checkpoint-schedule`. You can disable it at any time with `checkpoint-stop` or `checkpoint-schedule disable`.
+
+The skill does **not** install any background daemons, system services, or root-level processes. All scheduling runs under your user account.
+
+**File access scope**: The skill only reads and writes within `~/.openclaw/workspace`. It does not access files outside this directory. Sensitive files (.env.*, credentials, OAuth tokens) are excluded from backups via .gitignore.
 
 ## Troubleshooting
 

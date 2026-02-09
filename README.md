@@ -17,22 +17,11 @@ Automatically sync your OpenClaw agent's identity, memory, and configuration to 
 | ✅ MEMORY.md, memory/*.md | ❌ OAuth tokens |
 | ✅ TOOLS.md, AGENTS.md, HEARTBEAT.md | ❌ Credentials |
 | ✅ Custom scripts and tools | ❌ Temporary files |
-Okay.| ✅ Cron jobs (memory/cron-jobs-backup.json) | |
+| ✅ Cron jobs (memory/cron-jobs-backup.json) | |
 
 ## Quick Start
 
-### One-Liner Install (Recommended)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
-```
-
-This will:
-- Download and install the skill
-- Add commands to your PATH automatically
-- Offer to run the setup wizard
-
-### Manual Install
+### Install (Recommended)
 
 ```bash
 # Clone this repo
@@ -55,6 +44,14 @@ The interactive wizard will:
 2. Set up SSH authentication
 3. Configure automatic backups
 4. Test the backup system
+
+### Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
+```
+
+This runs the [install script](scripts/install-openclaw-checkpoint.sh) -- review it first if you prefer to inspect before executing.
 
 ## Commands
 
@@ -145,6 +142,19 @@ cat ~/.openclaw/workspace/memory/cron-jobs-backup.json
 2. **checkpoint-backup** exports cron jobs to JSON, then commits and pushes changes to GitHub
 3. **checkpoint-schedule** sets up cron (Linux) or launchd (macOS) for auto-backups
 4. **checkpoint-resume** pulls the latest backup from GitHub
+
+## Security and Permissions
+
+This skill uses standard system scheduling to automate backups:
+
+- **macOS**: Creates a launchd plist at `~/Library/LaunchAgents/com.openclaw.checkpoint.plist`
+- **Linux**: Adds a user-level cron job (visible via `crontab -l`)
+
+Auto-backup is **opt-in only** -- it is never enabled unless you explicitly run `checkpoint-schedule`. You can disable it at any time with `checkpoint-stop` or `checkpoint-schedule disable`.
+
+The skill does **not** install any background daemons, system services, or root-level processes. All scheduling runs under your user account.
+
+**File access scope**: The skill only reads and writes within `~/.openclaw/workspace`. It does not access files outside this directory. Sensitive files (.env.*, credentials, OAuth tokens) are excluded from backups via .gitignore.
 
 ## Troubleshooting
 

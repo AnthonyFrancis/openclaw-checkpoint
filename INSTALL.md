@@ -1,17 +1,6 @@
 # Installation
 
-## One-Liner Install (Recommended)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
-```
-
-This will:
-- Download the skill from GitHub
-- Add commands to your PATH
-- Offer to run the setup wizard
-
-## Manual Install
+## Git Clone (Recommended)
 
 ```bash
 git clone https://github.com/AnthonyFrancis/openclaw-checkpoint.git ~/.openclaw/skills/openclaw-checkpoint
@@ -26,6 +15,14 @@ checkpoint-setup
 ```
 
 Add the `export PATH` line to your `~/.zshrc` or `~/.bashrc` for persistence.
+
+## Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
+```
+
+This runs the [install script](scripts/install-openclaw-checkpoint.sh) -- review it first if you prefer to inspect before executing.
 
 ## Requirements
 
