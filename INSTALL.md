@@ -59,6 +59,7 @@ This launches an interactive restore wizard that:
 
 | Command | Description |
 |---------|-------------|
+| `checkpoint` | Show all available commands |
 | `checkpoint-setup` | Interactive first-time setup |
 | `checkpoint-backup` | Backup now |
 | `checkpoint-resume` | Restore from backup |

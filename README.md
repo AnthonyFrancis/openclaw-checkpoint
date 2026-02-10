@@ -57,6 +57,7 @@ This runs the install script -- review it first if you prefer to inspect before 
 
 | Command | Description |
 |---------|-------------|
+| `checkpoint` | Show all available commands |
 | `checkpoint-setup` | Interactive first-time setup wizard |
 | `checkpoint-backup` | Backup now |
 | `checkpoint-resume` | Restore from backup |

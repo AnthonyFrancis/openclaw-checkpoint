@@ -1,6 +1,6 @@
 ---
 name: openclaw-checkpoint
-description: Backup and restore OpenClaw workspace state across machines using git. Enables disaster recovery by syncing SOUL.md, MEMORY.md, memory files, cron jobs, and configuration to a remote repository. Use when user wants to checkpoint their OpenClaw state, restore on a new machine, migrate between computers, or protect against data loss. Provides commands checkpoint-setup (interactive onboarding), checkpoint-backup, checkpoint-resume, checkpoint-schedule (auto-backup), checkpoint-stop, checkpoint-status, checkpoint-init, and checkpoint-reset. Automatically backs up cron jobs to memory/cron-jobs-backup.json on each checkpoint-backup.
+description: Backup and restore OpenClaw workspace state across machines using git. Enables disaster recovery by syncing SOUL.md, MEMORY.md, memory files, cron jobs, and configuration to a remote repository. Use when user wants to checkpoint their OpenClaw state, restore on a new machine, migrate between computers, or protect against data loss. Provides commands checkpoint (help overview), checkpoint-setup (interactive onboarding), checkpoint-backup, checkpoint-resume, checkpoint-schedule (auto-backup), checkpoint-stop, checkpoint-status, checkpoint-init, and checkpoint-reset. Automatically backs up cron jobs to memory/cron-jobs-backup.json on each checkpoint-backup.
 ---
 
 # OpenClaw Checkpoint Skill
@@ -50,6 +50,20 @@ curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/
 This runs the install script -- review it first if you prefer to inspect before executing.
 
 ## Commands
+
+### checkpoint
+**Show all available commands and usage examples.**
+
+```bash
+checkpoint
+```
+
+**What it does:**
+- Displays a quick reference of all checkpoint commands with descriptions and examples
+
+**When to use:**
+- When you can't remember the exact command name
+- Quick reference for available options
 
 ### checkpoint-setup
 **Interactive onboarding flow for first-time setup.**
