@@ -1,0 +1,23 @@
+#!/bin/bash
+# checkpoint - Show all available checkpoint commands
+
+echo ""
+echo "📦 OpenClaw Checkpoint"
+echo "=============================="
+echo ""
+echo "Commands:"
+echo "   checkpoint-backup           - Backup now"
+echo "   checkpoint-resume           - Restore from remote"
+echo "   checkpoint-status           - Check backup health"
+echo "   checkpoint-setup            - Interactive first-time setup"
+echo "   checkpoint-auth             - Fix authentication issues"
+echo "   checkpoint-schedule hourly  - Set auto-backup (or 15min, 30min, daily, etc.)"
+echo "   checkpoint-schedule disable - Turn off automatic backups"
+echo "   checkpoint-stop             - Stop automatic backups"
+echo "   checkpoint-reset            - Reset for fresh setup"
+echo ""
+echo "Examples:"
+echo "   checkpoint-backup           - Save your workspace now"
+echo "   checkpoint-resume           - Restore from GitHub on a new machine"
+echo "   checkpoint-schedule hourly  - Enable hourly auto-backups"
+echo ""
