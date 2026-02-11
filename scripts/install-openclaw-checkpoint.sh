@@ -41,6 +41,10 @@ fi
 
 # Copy scripts to tools directory (for easy PATH access)
 echo "🧰 Installing commands..."
+
+# Remove old checkpoint scripts first (handles renames like checkpoint-resume → checkpoint-restore)
+rm -f "${TOOLS_DIR}/"checkpoint*
+
 cp "${INSTALL_DIR}/scripts/checkpoint"* "${TOOLS_DIR}/"
 chmod +x "${TOOLS_DIR}/"checkpoint*
 

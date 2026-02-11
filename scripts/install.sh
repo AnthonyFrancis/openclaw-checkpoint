@@ -21,6 +21,9 @@ if [ -f "/tmp/oc-checkpoint.skill" ]; then
     rm /tmp/oc-checkpoint.skill
 fi
 
+# Remove old checkpoint scripts first (handles renames like checkpoint-resume → checkpoint-restore)
+rm -f ~/.openclaw/workspace/tools/checkpoint*
+
 # Copy scripts to tools
 cp ~/.openclaw/skills/openclaw-checkpoint/scripts/checkpoint* ~/.openclaw/workspace/tools/ 2>/dev/null || {
     echo "❌ Skill not found. Please download openclaw-checkpoint.skill first."
