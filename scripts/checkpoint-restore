@@ -393,11 +393,54 @@ restore_onboarding() {
         restore_fresh "$CLONE_URL"
     fi
     
-    # Step 5: Verify restoration
-    echo ""
-    echo "✅ Step 5: Restoration complete!"
-    echo ""
+    # Step 5: Choose checkpoint
     cd "$WORKSPACE_DIR"
+
+    # Count available checkpoints
+    OB_TOTAL=$(git log --oneline -10 | wc -l | tr -d ' ')
+
+    if [ "$OB_TOTAL" -gt 1 ]; then
+        echo ""
+        echo "📋 Step 5: Choose checkpoint"
+        echo ""
+        echo "   Your repository has multiple checkpoints available:"
+        echo ""
+
+        OB_HASHES=()
+        OB_LABELS=()
+        obi=1
+        while IFS= read -r line; do
+            obhash=$(echo "$line" | awk '{print $1}')
+            oblabel=$(echo "$line" | cut -d' ' -f2-)
+            OB_HASHES+=("$obhash")
+            OB_LABELS+=("$oblabel")
+            printf "   %2d) %s\n" "$obi" "$line"
+            ((obi++))
+        done < <(git log --format="%h  %cd  %s" --date=format:"%Y-%m-%d %H:%M" -10)
+
+        echo ""
+        echo "   Enter 1 for most recent, or pick an older checkpoint."
+        echo ""
+        read -p "   Select checkpoint [1]: " OB_CHOICE
+        OB_CHOICE=${OB_CHOICE:-1}
+
+        if [[ "$OB_CHOICE" =~ ^[0-9]+$ ]] && [ "$OB_CHOICE" -ge 1 ] && [ "$OB_CHOICE" -le "${#OB_HASHES[@]}" ]; then
+            OB_IDX=$((OB_CHOICE - 1))
+            if [ "$OB_IDX" -gt 0 ]; then
+                OB_FULL=$(git rev-parse "${OB_HASHES[$OB_IDX]}")
+                echo ""
+                echo "   Restoring checkpoint ${OB_HASHES[$OB_IDX]}..."
+                git reset --hard "$OB_FULL" --quiet 2>/dev/null || git reset --hard "$OB_FULL"
+            fi
+        else
+            echo "   Invalid selection, using most recent checkpoint."
+        fi
+    fi
+
+    # Step 6: Verify restoration
+    echo ""
+    echo "✅ Step 6: Restoration complete!"
+    echo ""
     echo "   Commit: $(git rev-parse --short HEAD)"
     echo "   Time: $(git log -1 --format=%cd --date=iso)"
     echo ""
