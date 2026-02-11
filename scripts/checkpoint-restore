@@ -97,7 +97,7 @@ for job in data.get('jobs', []):
 
     # Write the Python restore script to a temp file to avoid heredoc quoting issues
     local TEMP_SCRIPT
-    TEMP_SCRIPT=$(mktemp /tmp/restore_cron_XXXXXX.py)
+    TEMP_SCRIPT=$(mktemp /tmp/restore_cron_XXXXXX)
 
     cat > "$TEMP_SCRIPT" << 'PYEOF'
 import json, subprocess, sys
