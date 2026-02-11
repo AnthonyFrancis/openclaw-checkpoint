@@ -856,6 +856,7 @@ if [ "$USE_LATEST" = true ]; then
         echo "✅ Already up to date"
         echo "   Commit: $(git rev-parse --short HEAD)"
         echo "   Time: $(git log -1 --format=%cd --date=iso)"
+        restore_cron_jobs
         exit 0
     fi
     echo "📥 Restoring latest checkpoint..."
@@ -926,6 +927,7 @@ if [ "$SELECTED_HASH" = "$CURRENT_SHORT" ]; then
     echo "✅ Already at this checkpoint"
     echo "   Commit: $SELECTED_HASH"
     echo "   Time: $(git log -1 --format=%cd --date=iso)"
+    restore_cron_jobs
     exit 0
 fi
 
