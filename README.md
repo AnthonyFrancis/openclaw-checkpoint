@@ -85,20 +85,18 @@ When your machine dies:
 ```bash
 # On new machine:
 
-# 1. Clone your backup
-git clone git@github.com:YOURUSER/openclaw-state.git ~/.openclaw/workspace
+# 1. Install checkpoint skill and restore interactively
+curl -fsSL https://raw.githubusercontent.com/AnthonyFrancis/openclaw-checkpoint/main/scripts/install-openclaw-checkpoint.sh | bash
+checkpoint-restore
 
 # 2. Restore API keys from your password manager
 # (secrets are not backed up for security)
 
 # 3. Start OpenClaw
 openclaw gateway start
-
-# 4. Restore your cron jobs
-openclaw cron restore ~/.openclaw/workspace/memory/cron-jobs-backup.json
 ```
 
-Your agent will remember everything up to the last checkpoint, including scheduled tasks.
+`checkpoint-restore` guides you through authentication, lets you pick which checkpoint to restore, and offers to restore your cron jobs automatically.
 
 ### Restoring an Older Checkpoint
 
@@ -132,19 +130,16 @@ Each time you run `checkpoint-backup`, your OpenClaw cron jobs are automatically
 
 **Backup** happens automatically -- no extra steps needed. The checkpoint-backup command calls `openclaw cron list --json`, cleans the output to keep only configuration (not runtime state), and saves it to the backup file.
 
-**Restore** after disaster recovery:
+**Restore** happens automatically during `checkpoint-restore` -- it detects the backup file and offers to restore your cron jobs. If you prefer to restore manually:
 
 ```bash
-# After restoring your workspace with checkpoint-restore, re-create your cron jobs:
-openclaw cron restore memory/cron-jobs-backup.json
-
-# Or manually inspect the backup and recreate jobs:
+# Manually inspect and recreate jobs:
 cat ~/.openclaw/workspace/memory/cron-jobs-backup.json
 ```
 
 **Requirements:**
 - The `openclaw` CLI must be available on PATH
-- The OpenClaw gateway must be running for backup to succeed
+- The OpenClaw gateway must be running for cron backup and restore to succeed
 - If either is unavailable, checkpoint-backup continues without cron backup (non-blocking)
 
 ## How It Works

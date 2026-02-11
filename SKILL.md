@@ -192,16 +192,18 @@ checkpoint-restore --force    # Discard local changes before restoring
   - Lets you specify your existing backup repository
   - Verifies access and restores your checkpoint
   - Handles merge/replace options if local files exist
+  - Shows available checkpoints to pick from (if the repo has more than one commit)
+  - Offers to restore cron jobs from backup
 - **Returning users:** Shows a list of the 10 most recent checkpoints to choose from
   - Pick the latest or any older checkpoint to restore
   - Current checkpoint is marked in the list
   - Restoring an older checkpoint warns that the next backup will overwrite newer remote checkpoints
   - Use `--latest` flag to skip the interactive selection and restore the most recent checkpoint automatically
-
-**After restoring, re-create cron jobs from the backup:**
-```bash
-openclaw cron restore memory/cron-jobs-backup.json
-```
+- **Uncommitted changes:** If you have local uncommitted changes, you're prompted to:
+  1. Save changes first (runs `checkpoint-backup`)
+  2. Discard local changes and continue restoring
+  3. Cancel
+- **Cron jobs:** Automatically offers to restore cron jobs from `memory/cron-jobs-backup.json` after restoring (requires OpenClaw gateway to be running)
 
 **When to use:**
 - Starting OpenClaw on a new machine
@@ -392,8 +394,8 @@ EOF
 # 4. Start OpenClaw
 openclaw gateway start
 
-# 5. Restore your cron jobs (scheduled tasks)
-openclaw cron restore ~/.openclaw/workspace/memory/cron-jobs-backup.json
+# 5. Cron jobs are restored automatically during checkpoint-restore
+# (if the gateway is running and cron backup exists)
 
 # 6. Enable automatic backups on this machine
 checkpoint-schedule hourly
@@ -456,11 +458,14 @@ Running `checkpoint-restore` will now automatically start the interactive restor
 Another machine pushed changes. Run `checkpoint-restore` first, then `checkpoint-backup`.
 
 ### "You have uncommitted changes"
-You have local work that isn't checkpointed. Either:
-- Run `checkpoint-backup` to save it first
-- Or `checkpoint-restore --force` to discard it
+`checkpoint-restore` will prompt you to choose:
+1. Save changes first (runs `checkpoint-backup`)
+2. Discard local changes and continue
+3. Cancel
 
-### Behind remote after resume
+You can also skip the prompt with `checkpoint-restore --force` to discard changes directly.
+
+### Behind remote after restore
 This is expected if another machine checkpointed since you last synced.
 
 ### GitHub prompting for username/password

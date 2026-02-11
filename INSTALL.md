@@ -55,6 +55,7 @@ This launches an interactive restore wizard that:
 - Connects to your existing backup repository
 - Lets you pick the most recent or any previous checkpoint to restore
 - Restores your OpenClaw state
+- Offers to restore your cron jobs (scheduled tasks) automatically
 
 To skip selection and restore the latest checkpoint automatically:
 
