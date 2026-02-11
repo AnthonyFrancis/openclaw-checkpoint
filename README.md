@@ -60,7 +60,7 @@ This runs the install script -- review it first if you prefer to inspect before 
 | `checkpoint` | Show all available commands |
 | `checkpoint-setup` | Interactive first-time setup wizard |
 | `checkpoint-backup` | Backup now |
-| `checkpoint-resume` | Restore from backup |
+| `checkpoint-restore` | Restore from backup (select checkpoint) |
 | `checkpoint-auth` | Fix authentication issues |
 | `checkpoint-status` | Check backup health |
 | `checkpoint-schedule` | Configure auto-backup frequency |
@@ -100,6 +100,16 @@ openclaw cron restore ~/.openclaw/workspace/memory/cron-jobs-backup.json
 
 Your agent will remember everything up to the last checkpoint, including scheduled tasks.
 
+### Restoring an Older Checkpoint
+
+If you need to roll back to a previous checkpoint:
+
+```bash
+checkpoint-restore
+```
+
+You'll see a numbered list of recent checkpoints and can select the one to restore. Use `checkpoint-restore --latest` to skip the selection and restore the most recent checkpoint automatically.
+
 ## ⚠️ Security: Use a PRIVATE Repository
 
 Your backup contains personal data:
@@ -125,7 +135,7 @@ Each time you run `checkpoint-backup`, your OpenClaw cron jobs are automatically
 **Restore** after disaster recovery:
 
 ```bash
-# After restoring your workspace with checkpoint-resume, re-create your cron jobs:
+# After restoring your workspace with checkpoint-restore, re-create your cron jobs:
 openclaw cron restore memory/cron-jobs-backup.json
 
 # Or manually inspect the backup and recreate jobs:
@@ -142,7 +152,7 @@ cat ~/.openclaw/workspace/memory/cron-jobs-backup.json
 1. **checkpoint-init** creates a git repo in `~/.openclaw/workspace`
 2. **checkpoint-backup** exports cron jobs to JSON, then commits and pushes changes to GitHub
 3. **checkpoint-schedule** sets up cron (Linux) or launchd (macOS) for auto-backups
-4. **checkpoint-resume** pulls the latest backup from GitHub
+4. **checkpoint-restore** lets you select and restore from any recent checkpoint on GitHub
 
 ## Security and Permissions
 
@@ -168,7 +178,9 @@ Run `checkpoint-setup` for guided setup, or `checkpoint-init` to initialize manu
 <details>
 <summary><strong>"Failed to push checkpoint"</strong></summary>
 
-Another machine pushed changes. Run `checkpoint-resume` first, then `checkpoint-backup`.
+Another machine pushed changes. Run `checkpoint-restore` first, then `checkpoint-backup`.
+
+If you restored an older checkpoint and then ran `checkpoint-backup`, the push will detect the diverged history and ask if you want to force push.
 </details>
 
 <details>

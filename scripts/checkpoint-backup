@@ -138,12 +138,39 @@ git commit -m "checkpoint: $(date '+%Y-%m-%d %H:%M')" --quiet
 
 # Push to remote
 echo "☁️  Pushing to $REMOTE_URL/$BRANCH..."
-if git push "$REMOTE_URL" "$BRANCH" --quiet; then
+if git push "$REMOTE_URL" "$BRANCH" --quiet 2>/dev/null; then
     echo "✅ Checkpoint saved successfully"
     echo "   Time: $(date '+%Y-%m-%d %H:%M:%S')"
     echo "   Commit: $(git rev-parse --short HEAD)"
 else
-    echo "❌ Failed to push checkpoint"
-    echo "   You may need to pull first: checkpoint-resume"
-    exit 1
+    # Normal push failed - check if local diverged (e.g., after restoring older checkpoint)
+    git fetch "$REMOTE_URL" "$BRANCH" --quiet 2>/dev/null || true
+    LOCAL_AHEAD=$(git rev-list "$REMOTE_URL/$BRANCH"..HEAD --count 2>/dev/null || echo "0")
+    REMOTE_AHEAD=$(git rev-list HEAD.."$REMOTE_URL/$BRANCH" --count 2>/dev/null || echo "0")
+
+    if [ "$REMOTE_AHEAD" -gt 0 ] && [ "$LOCAL_AHEAD" -gt 0 ]; then
+        # Diverged history - likely restored an older checkpoint then made changes
+        echo ""
+        echo "⚠️  Local history has diverged from remote."
+        echo "   This usually happens after restoring an older checkpoint."
+        echo ""
+        read -p "   Force push to overwrite remote? [y/N]: " FORCE_PUSH
+        if [[ "$FORCE_PUSH" =~ ^[Yy]$ ]]; then
+            if git push "$REMOTE_URL" "$BRANCH" --force --quiet; then
+                echo "✅ Checkpoint saved successfully (force pushed)"
+                echo "   Time: $(date '+%Y-%m-%d %H:%M:%S')"
+                echo "   Commit: $(git rev-parse --short HEAD)"
+            else
+                echo "❌ Force push failed"
+                exit 1
+            fi
+        else
+            echo "   Push cancelled. Run 'checkpoint-restore' to sync with remote first."
+            exit 1
+        fi
+    else
+        echo "❌ Failed to push checkpoint"
+        echo "   You may need to pull first: checkpoint-restore"
+        exit 1
+    fi
 fi

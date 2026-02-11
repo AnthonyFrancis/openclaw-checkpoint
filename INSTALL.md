@@ -47,13 +47,20 @@ This guides you through creating a private GitHub repo and configuring automatic
 If you already have a checkpoint backup on GitHub (e.g., setting up a new machine):
 
 ```bash
-checkpoint-resume
+checkpoint-restore
 ```
 
 This launches an interactive restore wizard that:
 - Helps you authenticate with GitHub
 - Connects to your existing backup repository
+- Lets you pick the most recent or any previous checkpoint to restore
 - Restores your OpenClaw state
+
+To skip selection and restore the latest checkpoint automatically:
+
+```bash
+checkpoint-restore --latest
+```
 
 ## Commands Available After Install
 
@@ -62,7 +69,7 @@ This launches an interactive restore wizard that:
 | `checkpoint` | Show all available commands |
 | `checkpoint-setup` | Interactive first-time setup |
 | `checkpoint-backup` | Backup now |
-| `checkpoint-resume` | Restore from backup |
+| `checkpoint-restore` | Restore from backup (select checkpoint) |
 | `checkpoint-status` | Check backup health |
 | `checkpoint-schedule` | Configure auto-backup |
 | `checkpoint-stop` | Stop automatic backups |

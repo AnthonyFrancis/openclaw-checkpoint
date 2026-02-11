@@ -223,13 +223,13 @@ cd "$WORKSPACE_DIR" 2>/dev/null || {
 if ! git rev-parse --git-dir >/dev/null 2>&1 || ! git remote get-url origin >/dev/null 2>&1; then
     echo "✅ Authentication successful!"
     echo "   (No repo/remote yet — run checkpoint-setup or checkpoint-init to create one)"
-    echo "   You can now use: checkpoint, checkpoint-resume, etc."
+    echo "   You can now use: checkpoint, checkpoint-restore, etc."
     exit 0
 fi
 
 if git fetch origin --dry-run 2>/dev/null || git ls-remote origin HEAD >/dev/null 2>&1; then
     echo "✅ Authentication successful!"
-    echo "   You can now use: checkpoint, checkpoint-resume, etc."
+    echo "   You can now use: checkpoint, checkpoint-restore, etc."
 else
     echo "⚠️  Could not reach remote (repo may not exist yet or access may be limited)"
     echo "   Auth with GitHub CLI succeeded. Run checkpoint-setup to create the repo if needed."

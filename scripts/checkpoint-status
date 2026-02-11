@@ -51,7 +51,7 @@ if [ -n "$LAST_COMMIT" ]; then
     if [ "$LOCAL" != "$REMOTE" ] && [ -n "$REMOTE" ]; then
         BEHIND=$(git rev-list HEAD..origin/main --count 2>/dev/null || echo "0")
         echo "   ⚠️  Behind remote by $BEHIND commit(s)"
-        echo "      Run: checkpoint-resume"
+        echo "      Run: checkpoint-restore"
     else
         echo "   ✅ Up to date with remote"
     fi
@@ -128,7 +128,7 @@ echo ""
 echo "=============================="
 echo "💡 Quick Actions:"
 echo "   checkpoint-backup           - Backup now"
-echo "   checkpoint-resume           - Restore from remote"
+echo "   checkpoint-restore           - Restore from remote"
 echo "   checkpoint-auth             - Fix authentication issues"
 echo "   checkpoint-schedule hourly  - Set auto-backup (or 15min, 30min, daily, etc.)"
 echo "   checkpoint-schedule disable - Turn off automatic backups"

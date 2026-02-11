@@ -1,5 +1,5 @@
 #!/bin/bash
-# checkpoint-resume - Restore OpenClaw state from remote repository
+# checkpoint-restore - Restore OpenClaw state from remote repository
 
 set -e
 
@@ -24,7 +24,7 @@ restore_cron_jobs() {
     if ! command -v openclaw >/dev/null 2>&1; then
         echo ""
         echo "   ℹ️  Cron job backup found but OpenClaw CLI not available."
-        echo "      Start the gateway first, then run: checkpoint-resume"
+        echo "      Start the gateway first, then run: checkpoint-restore"
         return 0
     fi
 
@@ -46,7 +46,7 @@ restore_cron_jobs() {
     RESTORE_CRONS=${RESTORE_CRONS:-Y}
 
     if [[ ! "$RESTORE_CRONS" =~ ^[Yy]$ ]]; then
-        echo "   Skipped. Restore later with: checkpoint-resume"
+        echo "   Skipped. Restore later with: checkpoint-restore"
         return 0
     fi
 
@@ -253,7 +253,7 @@ restore_onboarding() {
     fi
     
     if [ "$RESTORE_CHOICE" != "1" ]; then
-        echo "❌ Invalid choice. Please run checkpoint-resume again."
+        echo "❌ Invalid choice. Please run checkpoint-restore again."
         exit 1
     fi
     
@@ -718,6 +718,16 @@ if ! git remote get-url origin >/dev/null 2>&1; then
     exit 0
 fi
 
+# Parse flags
+FORCE=false
+USE_LATEST=false
+for arg in "$@"; do
+    case "$arg" in
+        --force|-f) FORCE=true ;;
+        --latest|-l) USE_LATEST=true ;;
+    esac
+done
+
 # Normal resume flow - remote is configured
 echo "☁️  Fetching latest checkpoint..."
 if ! git fetch "$REMOTE_URL" "$BRANCH" --quiet 2>&1; then
@@ -737,7 +747,7 @@ if ! git fetch "$REMOTE_URL" "$BRANCH" --quiet 2>&1; then
         echo ""
         echo "   Options:"
         echo "   • Run 'checkpoint-auth' to re-authenticate"
-        echo "   • Run 'checkpoint-reset' then 'checkpoint-resume' to start fresh"
+        echo "   • Run 'checkpoint-reset' then 'checkpoint-restore' to start fresh"
         exit 1
     fi
     
@@ -750,35 +760,160 @@ fi
 LOCAL=$(git rev-parse @)
 REMOTE=$(git rev-parse "$REMOTE_URL/$BRANCH")
 
-if [ "$LOCAL" = "$REMOTE" ]; then
-    echo "✅ Already up to date"
-    echo "   Commit: $(git rev-parse --short HEAD)"
+# Check for local changes that would be overwritten
+if ! git diff --quiet HEAD; then
+    if [ "$FORCE" = true ]; then
+        echo "⚠️  Discarding local changes (--force)..."
+        git checkout -- .
+        git clean -fd --quiet
+    else
+        echo "⚠️  You have uncommitted changes"
+        echo ""
+        echo "   Options:"
+        echo "     1) Save changes first (run checkpoint-backup)"
+        echo "     2) Discard local changes and restore"
+        echo "     3) Cancel"
+        echo ""
+        read -p "   Choose [1-3]: " UNCOMMITTED_CHOICE
+
+        case "$UNCOMMITTED_CHOICE" in
+            1)
+                if command -v checkpoint-backup >/dev/null 2>&1; then
+                    checkpoint-backup
+                    UNCOMMITTED_EXIT=$?
+                    if [ $UNCOMMITTED_EXIT -ne 0 ]; then
+                        exit $UNCOMMITTED_EXIT
+                    fi
+                    # After backup, re-check - we may now be clean
+                    if ! git diff --quiet HEAD; then
+                        echo "   Some changes remain uncommitted. Run checkpoint-restore again."
+                        exit 1
+                    fi
+                else
+                    echo "   Run: checkpoint-backup"
+                    exit 1
+                fi
+                ;;
+            2)
+                echo "   Discarding local changes..."
+                git checkout -- .
+                git clean -fd --quiet
+                ;;
+            *)
+                echo "   Cancelled."
+                exit 1
+                ;;
+        esac
+    fi
+fi
+
+# --latest flag: skip selection, restore most recent
+if [ "$USE_LATEST" = true ]; then
+    if [ "$LOCAL" = "$REMOTE" ]; then
+        echo "✅ Already up to date"
+        echo "   Commit: $(git rev-parse --short HEAD)"
+        echo "   Time: $(git log -1 --format=%cd --date=iso)"
+        exit 0
+    fi
+    echo "📥 Restoring latest checkpoint..."
+    if git pull "$REMOTE_URL" "$BRANCH" --quiet; then
+        echo "✅ Checkpoint restored successfully"
+        echo "   Commit: $(git rev-parse --short HEAD)"
+        echo "   Time: $(git log -1 --format=%cd --date=iso)"
+        echo ""
+        echo "📝 Recent changes:"
+        git log --oneline -3 | sed 's/^/   /'
+        restore_cron_jobs
+    else
+        echo "❌ Failed to restore checkpoint"
+        exit 1
+    fi
+    exit 0
+fi
+
+# Interactive checkpoint selection
+echo ""
+echo "📋 Available checkpoints:"
+echo ""
+
+# Build list of commits from remote branch
+COMMIT_HASHES=()
+COMMIT_LABELS=()
+i=1
+while IFS= read -r line; do
+    hash=$(echo "$line" | awk '{print $1}')
+    label=$(echo "$line" | cut -d' ' -f2-)
+    COMMIT_HASHES+=("$hash")
+    COMMIT_LABELS+=("$label")
+    # Highlight if this is the current local commit
+    if [ "$hash" = "$(git rev-parse --short HEAD)" ]; then
+        printf "   %2d) %s  ← current\n" "$i" "$line"
+    else
+        printf "   %2d) %s\n" "$i" "$line"
+    fi
+    ((i++))
+done < <(git log "$REMOTE_URL/$BRANCH" --format="%h  %cd  %s" --date=format:"%Y-%m-%d %H:%M" -10)
+
+TOTAL_COMMITS=${#COMMIT_HASHES[@]}
+
+if [ "$TOTAL_COMMITS" -eq 0 ]; then
+    echo "   No checkpoints found on remote."
+    exit 1
+fi
+
+echo ""
+echo "   Enter 1 for most recent, or pick an older checkpoint."
+echo ""
+read -p "Select checkpoint [1]: " CHECKPOINT_CHOICE
+CHECKPOINT_CHOICE=${CHECKPOINT_CHOICE:-1}
+
+# Validate input
+if ! [[ "$CHECKPOINT_CHOICE" =~ ^[0-9]+$ ]] || [ "$CHECKPOINT_CHOICE" -lt 1 ] || [ "$CHECKPOINT_CHOICE" -gt "$TOTAL_COMMITS" ]; then
+    echo "❌ Invalid selection. Please enter a number between 1 and $TOTAL_COMMITS."
+    exit 1
+fi
+
+SELECTED_INDEX=$((CHECKPOINT_CHOICE - 1))
+SELECTED_HASH="${COMMIT_HASHES[$SELECTED_INDEX]}"
+
+# Check if already on the selected commit
+CURRENT_SHORT=$(git rev-parse --short HEAD)
+if [ "$SELECTED_HASH" = "$CURRENT_SHORT" ]; then
+    echo ""
+    echo "✅ Already at this checkpoint"
+    echo "   Commit: $SELECTED_HASH"
     echo "   Time: $(git log -1 --format=%cd --date=iso)"
     exit 0
 fi
 
-# Check for local changes that would be overwritten
-if ! git diff --quiet HEAD; then
-    echo "⚠️  You have uncommitted changes"
-    echo "   Options:"
-    echo "     1. 'checkpoint-backup' - Save your changes first"
-    echo "     2. 'checkpoint-resume --force' - Discard local changes"
-    exit 1
-fi
-
-# Pull latest
-echo "📥 Restoring checkpoint..."
-if git pull "$REMOTE_URL" "$BRANCH" --quiet; then
-    echo "✅ Checkpoint restored successfully"
+if [ "$SELECTED_INDEX" -eq 0 ]; then
+    # Latest checkpoint - use git pull for clean fast-forward
+    echo ""
+    echo "📥 Restoring latest checkpoint..."
+    if git pull "$REMOTE_URL" "$BRANCH" --quiet; then
+        echo "✅ Checkpoint restored successfully"
+        echo "   Commit: $(git rev-parse --short HEAD)"
+        echo "   Time: $(git log -1 --format=%cd --date=iso)"
+        echo ""
+        echo "📝 Recent changes:"
+        git log --oneline -3 | sed 's/^/   /'
+        restore_cron_jobs
+    else
+        echo "❌ Failed to restore checkpoint"
+        exit 1
+    fi
+else
+    # Older checkpoint - resolve full hash and reset
+    FULL_HASH=$(git rev-parse "$SELECTED_HASH")
+    echo ""
+    echo "📥 Restoring checkpoint $SELECTED_HASH..."
+    git reset --hard "$FULL_HASH" --quiet 2>/dev/null || git reset --hard "$FULL_HASH"
+    echo "✅ Checkpoint restored to ${COMMIT_LABELS[$SELECTED_INDEX]}"
     echo "   Commit: $(git rev-parse --short HEAD)"
     echo "   Time: $(git log -1 --format=%cd --date=iso)"
     echo ""
-    echo "📝 Recent changes:"
-    git log --oneline -3 | sed 's/^/   /'
-
-    # Offer to restore cron jobs if backup exists
+    echo "   ⚠️  You restored an older checkpoint."
+    echo "   Your next 'checkpoint-backup' will overwrite newer remote checkpoints."
+    echo "   To return to the latest, run 'checkpoint-restore' again."
     restore_cron_jobs
-else
-    echo "❌ Failed to restore checkpoint"
-    exit 1
 fi

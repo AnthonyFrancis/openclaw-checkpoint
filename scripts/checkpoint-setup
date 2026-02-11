@@ -231,8 +231,8 @@ To restore this workspace on a new machine:
 # Clone the backup
 git clone git@github.com:$GITHUB_USER/$REPO_NAME.git ~/.openclaw/workspace
 
-# Or use the checkpoint-resume command if you have the skill installed
-checkpoint-resume
+# Or use the checkpoint-restore command if you have the skill installed
+checkpoint-restore
 \`\`\`
 
 ## Commands
@@ -241,7 +241,7 @@ checkpoint-resume
 |---------|-------------|
 | \`checkpoint-backup\` | Create a backup now |
 | \`checkpoint-status\` | Check backup health |
-| \`checkpoint-resume\` | Restore from backup |
+| \`checkpoint-restore\` | Restore from backup |
 | \`checkpoint-schedule\` | Configure auto-backup frequency |
 | \`checkpoint-reset\` | Reset for fresh setup |
 

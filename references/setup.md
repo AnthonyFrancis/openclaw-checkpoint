@@ -177,7 +177,7 @@ Same as laptop stolen — your data is safe on GitHub's servers.
 git status
 
 # Restore from last checkpoint
-checkpoint-resume
+checkpoint-restore
 
 # Or restore specific file from history
 git checkout HEAD -- MEMORY.md
