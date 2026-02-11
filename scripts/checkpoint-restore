@@ -28,6 +28,14 @@ restore_cron_jobs() {
         return 0
     fi
 
+    # Check if gateway is reachable before attempting restore
+    if ! openclaw cron list --json >/dev/null 2>&1; then
+        echo ""
+        echo "   ℹ️  Cron job backup found but the OpenClaw gateway is not running."
+        echo "      Start the gateway first, then run: checkpoint-restore"
+        return 0
+    fi
+
     # Count jobs in backup
     local JOB_COUNT
     JOB_COUNT=$(python3 -c "import json; print(len(json.load(open('$BACKUP_FILE')).get('jobs',[])))" 2>/dev/null || echo "0")
