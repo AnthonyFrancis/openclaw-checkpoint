@@ -127,6 +127,7 @@ checkpoint-backup --agent alex        # Backup only the 'alex' agent (+ workspac
 **What it does:**
 - Backs up OpenClaw cron jobs to `memory/cron-jobs-backup.json` (requires `openclaw` CLI and running gateway)
 - Copies agent folders from `~/.openclaw/agents/` into `agents/` in the workspace repo (strips nested `.git` dirs)
+- Normalizes home-directory paths (`$HOME` -> `{{HOME}}`) for cross-machine portability
 - Commits all changes in ~/.openclaw/workspace
 - Pushes to origin/main
 - Shows commit hash and timestamp
@@ -226,6 +227,7 @@ checkpoint-restore --agent alex       # Restore only the 'alex' agent
   1. Save changes first (runs `checkpoint-backup`)
   2. Discard local changes and continue restoring
   3. Cancel
+- **Path portability:** Automatically expands `{{HOME}}` placeholders and rewrites old home-directory paths for the current machine
 - **Cron jobs:** Automatically offers to restore cron jobs from `memory/cron-jobs-backup.json` after restoring (requires OpenClaw gateway to be running)
 - **Agents:** Offers to restore agents from `agents/` directory in the backup to `~/.openclaw/agents/`
 
@@ -450,6 +452,36 @@ checkpoint-status
 - Old backup repos without an `agents/` directory work fine -- restore simply skips agents
 - No existing behavior changes when no agents are present
 
+## Cross-Machine Portability
+
+When you back up on one machine (e.g. `/Users/jerry`) and restore on another (e.g. `/Users/tom`), hardcoded absolute home-directory paths in workspace files would break. The checkpoint system handles this automatically.
+
+### How It Works
+
+- **On backup:** All occurrences of your `$HOME` path (e.g. `/Users/jerry`) are replaced with the placeholder `{{HOME}}` in text files. A `.checkpoint-meta.json` file is written with the source machine's details.
+- **On restore:** The `{{HOME}}` placeholder is expanded to the current machine's `$HOME` (e.g. `/Users/tom`). For backwards compatibility with older backups that were created before normalization, any remaining literal old home paths are also rewritten.
+
+### What Gets Processed
+
+Only text files likely to contain paths are scanned:
+- `*.md`, `*.json`, `*.sh`, `*.txt`, `*.yaml`, `*.yml`, `*.toml`, `*.cfg`, `*.conf`
+
+Binary files, `.git/`, and `node_modules/` are never touched.
+
+### .checkpoint-meta.json
+
+This file is auto-generated on each backup and records the source machine:
+
+```json
+{
+  "source_home": "/Users/jerry",
+  "source_user": "jerry",
+  "hostname": "Jerrys-MacBook-Pro"
+}
+```
+
+On restore, this metadata tells the script which old paths to rewrite. The file is updated after restore to reflect the current machine.
+
 ### Manual Cron Setup (Advanced)
 
 If you prefer manual cron:
@@ -600,6 +632,18 @@ checkpoint-backup
 
 ### Restored agents missing files
 Agent restore copies the backup as-is. If the backup was taken before certain files were added to the agent, those files won't be present. Run `checkpoint-backup` on the source machine first to capture the latest state.
+
+### "Permission denied, mkdir '/Users/olduser'" after restoring on a new machine
+This means files contain hardcoded paths from the original machine. If the backup was created before path normalization was added, run:
+```bash
+cd ~/.openclaw/workspace
+grep -rl "/Users/olduser" --include="*.md" --include="*.json" --include="*.sh" | \
+  xargs sed -i '' "s|/Users/olduser|$HOME|g"
+```
+Future backups will normalize paths automatically.
+
+### Files show {{HOME}} instead of real paths
+This is expected **in the backup repo on GitHub**. The `{{HOME}}` placeholder is replaced with the real `$HOME` path on each restore. If you see `{{HOME}}` in your local workspace after a restore, run `checkpoint-restore --latest` again.
 
 ## Limitations
 

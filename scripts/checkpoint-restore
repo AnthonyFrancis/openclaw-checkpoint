@@ -329,6 +329,86 @@ restore_agents() {
 }
 
 # ===========================================================================
+# PATH EXPANSION
+# Replace {{HOME}} placeholders and old literal home paths with current $HOME
+# ===========================================================================
+expand_paths() {
+    local META_FILE="$WORKSPACE_DIR/.checkpoint-meta.json"
+    local OLD_HOME=""
+    local CURRENT_HOME="$HOME"
+    local ESCAPED_CURRENT_HOME
+    ESCAPED_CURRENT_HOME=$(printf '%s\n' "$CURRENT_HOME" | sed 's/[\/&]/\\&/g')
+
+    # Read old home from metadata if available
+    if [ -f "$META_FILE" ]; then
+        OLD_HOME=$(python3 -c "import json; print(json.load(open('$META_FILE')).get('source_home',''))" 2>/dev/null || true)
+    fi
+
+    # Replace {{HOME}} with current $HOME
+    local placeholder_count
+    placeholder_count=$(find "$WORKSPACE_DIR" -path "$WORKSPACE_DIR/.git" -prune -o \
+        -type f \( -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "*.txt" \
+        -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.cfg" -o -name "*.conf" \) \
+        -print0 2>/dev/null | xargs -0 grep -l '{{HOME}}' 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$placeholder_count" -gt 0 ]; then
+        echo ""
+        echo "🔄 Expanding paths for this machine ($placeholder_count file(s))..."
+
+        find "$WORKSPACE_DIR" -path "$WORKSPACE_DIR/.git" -prune -o \
+            -type f \( -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "*.txt" \
+            -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.cfg" -o -name "*.conf" \) \
+            -print0 2>/dev/null | xargs -0 grep -l '{{HOME}}' 2>/dev/null | while IFS= read -r file; do
+            if [[ "$OSTYPE" == darwin* ]]; then
+                sed -i '' "s|{{HOME}}|${ESCAPED_CURRENT_HOME}|g" "$file"
+            else
+                sed -i "s|{{HOME}}|${ESCAPED_CURRENT_HOME}|g" "$file"
+            fi
+        done
+
+        echo "   ✅ Replaced {{HOME}} → $CURRENT_HOME in $placeholder_count file(s)"
+    fi
+
+    # Also replace old literal home path for backwards compatibility (pre-normalization backups)
+    if [ -n "$OLD_HOME" ] && [ "$OLD_HOME" != "$CURRENT_HOME" ]; then
+        local ESCAPED_OLD_HOME
+        ESCAPED_OLD_HOME=$(printf '%s\n' "$OLD_HOME" | sed 's/[\/&]/\\&/g')
+
+        local old_path_count
+        old_path_count=$(find "$WORKSPACE_DIR" -path "$WORKSPACE_DIR/.git" -prune -o \
+            -type f \( -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "*.txt" \
+            -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.cfg" -o -name "*.conf" \) \
+            -print0 2>/dev/null | xargs -0 grep -l "$OLD_HOME" 2>/dev/null | wc -l | tr -d ' ')
+
+        if [ "$old_path_count" -gt 0 ]; then
+            echo "🔄 Rewriting legacy paths ($old_path_count file(s))..."
+
+            find "$WORKSPACE_DIR" -path "$WORKSPACE_DIR/.git" -prune -o \
+                -type f \( -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "*.txt" \
+                -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.cfg" -o -name "*.conf" \) \
+                -print0 2>/dev/null | xargs -0 grep -l "$OLD_HOME" 2>/dev/null | while IFS= read -r file; do
+                if [[ "$OSTYPE" == darwin* ]]; then
+                    sed -i '' "s|${ESCAPED_OLD_HOME}|${ESCAPED_CURRENT_HOME}|g" "$file"
+                else
+                    sed -i "s|${ESCAPED_OLD_HOME}|${ESCAPED_CURRENT_HOME}|g" "$file"
+                fi
+            done
+
+            echo "   ✅ Replaced $OLD_HOME → $CURRENT_HOME in $old_path_count file(s)"
+        fi
+    fi
+
+    # Update metadata to reflect the current machine
+    cat > "$META_FILE" << METAEOF
+{
+  "source_home": "$CURRENT_HOME",
+  "source_user": "$(whoami)",
+  "hostname": "$(hostname -s 2>/dev/null || hostname)"
+}
+METAEOF
+}
+
+# ===========================================================================
 # RESTORE ONBOARDING FLOW
 # Triggered when no remote is configured (first-time restore scenario)
 # ===========================================================================
@@ -557,6 +637,9 @@ restore_onboarding() {
     echo "=============================="
     echo "🎉 Your OpenClaw state has been restored!"
     echo ""
+
+    # Expand paths for this machine
+    expand_paths
 
     # Offer to restore cron jobs (skip if --agents-only)
     if [ "$AGENTS_ONLY" = false ]; then
@@ -958,6 +1041,7 @@ if [ "$USE_LATEST" = true ]; then
         echo "✅ Already up to date"
         echo "   Commit: $(git rev-parse --short HEAD)"
         echo "   Time: $(git log -1 --format=%cd --date=iso)"
+        expand_paths
         if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
         if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
         exit 0
@@ -970,6 +1054,7 @@ if [ "$USE_LATEST" = true ]; then
         echo ""
         echo "📝 Recent changes:"
         git log --oneline -3 | sed 's/^/   /'
+        expand_paths
         if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
         if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
     else
@@ -1031,6 +1116,7 @@ if [ "$SELECTED_HASH" = "$CURRENT_SHORT" ]; then
     echo "✅ Already at this checkpoint"
     echo "   Commit: $SELECTED_HASH"
     echo "   Time: $(git log -1 --format=%cd --date=iso)"
+    expand_paths
     if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
     if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
     exit 0
@@ -1047,6 +1133,7 @@ if [ "$SELECTED_INDEX" -eq 0 ]; then
         echo ""
         echo "📝 Recent changes:"
         git log --oneline -3 | sed 's/^/   /'
+        expand_paths
         if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
         if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
     else
@@ -1066,6 +1153,7 @@ else
     echo "   ⚠️  You restored an older checkpoint."
     echo "   Your next 'checkpoint-backup' will overwrite newer remote checkpoints."
     echo "   To return to the latest, run 'checkpoint-restore' again."
+    expand_paths
     if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
     if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
 fi

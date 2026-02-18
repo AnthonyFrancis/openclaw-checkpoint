@@ -181,6 +181,51 @@ backup_agents() {
     echo "   ✅ Agent backup complete"
 }
 
+# ===========================================================================
+# PATH NORMALIZATION
+# Replace literal $HOME paths with {{HOME}} for cross-machine portability
+# ===========================================================================
+normalize_paths() {
+    local FILE_PATTERN='-name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "*.txt" -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.cfg" -o -name "*.conf"'
+    local ESCAPED_HOME
+    ESCAPED_HOME=$(printf '%s\n' "$HOME" | sed 's/[\/&]/\\&/g')
+
+    # Write metadata so restore knows the source machine
+    cat > "$WORKSPACE_DIR/.checkpoint-meta.json" << METAEOF
+{
+  "source_home": "$HOME",
+  "source_user": "$(whoami)",
+  "hostname": "$(hostname -s 2>/dev/null || hostname)"
+}
+METAEOF
+
+    # Count files containing the literal home path
+    local match_count
+    match_count=$(find "$WORKSPACE_DIR" -path "$WORKSPACE_DIR/.git" -prune -o \
+        -type f \( -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "*.txt" \
+        -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.cfg" -o -name "*.conf" \) \
+        -print0 2>/dev/null | xargs -0 grep -l "$HOME" 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$match_count" -eq 0 ]; then
+        return 0
+    fi
+
+    echo "🔄 Normalizing paths for portability ($match_count file(s))..."
+
+    find "$WORKSPACE_DIR" -path "$WORKSPACE_DIR/.git" -prune -o \
+        -type f \( -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "*.txt" \
+        -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.cfg" -o -name "*.conf" \) \
+        -print0 2>/dev/null | xargs -0 grep -l "$HOME" 2>/dev/null | while IFS= read -r file; do
+        if [[ "$OSTYPE" == darwin* ]]; then
+            sed -i '' "s|${ESCAPED_HOME}|{{HOME}}|g" "$file"
+        else
+            sed -i "s|${ESCAPED_HOME}|{{HOME}}|g" "$file"
+        fi
+    done
+
+    echo "   ✅ Replaced $HOME → {{HOME}} in $match_count file(s)"
+}
+
 # Backup cron jobs before committing (skip if --agents-only)
 if [ "$AGENTS_ONLY" = false ]; then
     backup_cron_jobs
@@ -190,6 +235,9 @@ fi
 if [ "$WORKSPACE_ONLY" = false ]; then
     backup_agents
 fi
+
+# Normalize paths for cross-machine portability
+normalize_paths
 
 # Prevent concurrent runs using mkdir (atomic on all platforms)
 cleanup_lock() {
