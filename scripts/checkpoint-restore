@@ -92,18 +92,15 @@ restore_cron_jobs() {
         echo ""
         echo "   ⚠️  Found $EXISTING_COUNT existing cron jobs on this machine."
         echo ""
-        echo "   1) Keep existing + add from backup (may create duplicates)"
-        echo "   2) Erase existing, then restore from backup (clean slate)"
+        echo "   1) Erase existing, then restore from backup (clean slate)"
+        echo "   2) Keep existing + add from backup (may create duplicates)"
         echo "   3) Cancel"
         echo ""
-        read -p "   Choose [1-3, default: 2]: " EXISTING_CHOICE
-        EXISTING_CHOICE=${EXISTING_CHOICE:-2}
+        read -p "   Choose [1-3, default: 1]: " EXISTING_CHOICE
+        EXISTING_CHOICE=${EXISTING_CHOICE:-1}
 
         case "$EXISTING_CHOICE" in
             1)
-                echo "   Keeping existing cron jobs..."
-                ;;
-            2)
                 echo "   Removing existing cron jobs..."
                 # Remove all existing jobs
                 openclaw cron list --json 2>/dev/null | python3 -c "
@@ -118,6 +115,9 @@ for job in data.get('jobs', []):
         print('done' if r.returncode == 0 else 'failed')
 " 2>/dev/null
                 echo ""
+                ;;
+            2)
+                echo "   Keeping existing cron jobs..."
                 ;;
             *)
                 echo "   Cancelled."
