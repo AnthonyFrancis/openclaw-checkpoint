@@ -7,6 +7,40 @@ WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
 REMOTE_URL="${CHECKPOINT_REMOTE:-origin}"
 BRANCH="${CHECKPOINT_BRANCH:-main}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENTS_DIR="${HOME}/.openclaw/agents"
+AGENTS_BACKUP_DIR="${WORKSPACE_DIR}/agents"
+
+# ===========================================================================
+# FLAG PARSING
+# ===========================================================================
+FORCE=false
+USE_LATEST=false
+WORKSPACE_ONLY=false
+AGENTS_ONLY=false
+SINGLE_AGENT=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --force|-f) FORCE=true; shift ;;
+        --latest|-l) USE_LATEST=true; shift ;;
+        --workspace-only) WORKSPACE_ONLY=true; shift ;;
+        --agents-only) AGENTS_ONLY=true; shift ;;
+        --agent)
+            if [ -n "${2:-}" ]; then
+                SINGLE_AGENT="$2"; shift 2
+            else
+                echo "❌ --agent requires a name argument"
+                exit 1
+            fi
+            ;;
+        *) shift ;;
+    esac
+done
+
+if [ "$WORKSPACE_ONLY" = true ] && [ "$AGENTS_ONLY" = true ]; then
+    echo "❌ Cannot use --workspace-only and --agents-only together"
+    exit 1
+fi
 
 # ===========================================================================
 # CRON JOB RESTORE
@@ -223,6 +257,75 @@ PYEOF
     local EXIT_CODE=$?
     rm -f "$TEMP_SCRIPT"
     return $EXIT_CODE
+}
+
+# ===========================================================================
+# AGENT RESTORE
+# Copy agent folders from workspace agents/ back to ~/.openclaw/agents/
+# ===========================================================================
+restore_agents() {
+    if [ ! -d "$AGENTS_BACKUP_DIR" ]; then
+        echo "   ℹ️  No agents found in backup — skipping agent restore"
+        return 0
+    fi
+
+    # Build list of agents to restore
+    local agents=()
+    if [ -n "$SINGLE_AGENT" ]; then
+        if [ -d "$AGENTS_BACKUP_DIR/$SINGLE_AGENT" ]; then
+            agents=("$SINGLE_AGENT")
+        else
+            echo "   ❌ Agent '$SINGLE_AGENT' not found in backup"
+            return 1
+        fi
+    else
+        for d in "$AGENTS_BACKUP_DIR"/*/; do
+            [ -d "$d" ] && agents+=("$(basename "$d")")
+        done
+    fi
+
+    if [ ${#agents[@]} -eq 0 ]; then
+        echo "   ℹ️  No agents found in backup — skipping agent restore"
+        return 0
+    fi
+
+    echo ""
+    echo "🤖 Agent Restore"
+    echo "─────────────────────────────────────────"
+    echo "   Found ${#agents[@]} agent(s) in backup: ${agents[*]}"
+    echo ""
+
+    read -p "   Restore ${#agents[@]} agent(s) to ~/.openclaw/agents/? [Y/n]: " RESTORE_AGENTS_CHOICE
+    RESTORE_AGENTS_CHOICE=${RESTORE_AGENTS_CHOICE:-Y}
+
+    if [[ ! "$RESTORE_AGENTS_CHOICE" =~ ^[Yy]$ ]]; then
+        echo "   Skipped agent restore."
+        return 0
+    fi
+
+    mkdir -p "$AGENTS_DIR"
+
+    for agent in "${agents[@]}"; do
+        local src="$AGENTS_BACKUP_DIR/$agent"
+        local dest="$AGENTS_DIR/$agent"
+
+        echo "   • $agent..."
+
+        if [ -d "$dest" ]; then
+            echo "     ⚠️  Agent '$agent' already exists locally — overwriting"
+        fi
+
+        if command -v rsync >/dev/null 2>&1; then
+            rsync -a "$src/" "$dest/"
+        else
+            mkdir -p "$dest"
+            cp -r "$src/." "$dest/"
+        fi
+
+        echo "     ✅ $agent restored"
+    done
+
+    echo "   ✅ Agent restore complete"
 }
 
 # ===========================================================================
@@ -455,8 +558,15 @@ restore_onboarding() {
     echo "🎉 Your OpenClaw state has been restored!"
     echo ""
 
-    # Offer to restore cron jobs
-    restore_cron_jobs
+    # Offer to restore cron jobs (skip if --agents-only)
+    if [ "$AGENTS_ONLY" = false ]; then
+        restore_cron_jobs
+    fi
+
+    # Offer to restore agents (skip if --workspace-only)
+    if [ "$WORKSPACE_ONLY" = false ]; then
+        restore_agents
+    fi
 
     echo "   Next steps:"
     echo "   • Restore your API keys (they're not backed up for security)"
@@ -761,15 +871,7 @@ if ! git remote get-url origin >/dev/null 2>&1; then
     exit 0
 fi
 
-# Parse flags
-FORCE=false
-USE_LATEST=false
-for arg in "$@"; do
-    case "$arg" in
-        --force|-f) FORCE=true ;;
-        --latest|-l) USE_LATEST=true ;;
-    esac
-done
+# Flags already parsed at top of script
 
 # Normal resume flow - remote is configured
 echo "☁️  Fetching latest checkpoint..."
@@ -856,7 +958,8 @@ if [ "$USE_LATEST" = true ]; then
         echo "✅ Already up to date"
         echo "   Commit: $(git rev-parse --short HEAD)"
         echo "   Time: $(git log -1 --format=%cd --date=iso)"
-        restore_cron_jobs
+        if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
+        if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
         exit 0
     fi
     echo "📥 Restoring latest checkpoint..."
@@ -867,7 +970,8 @@ if [ "$USE_LATEST" = true ]; then
         echo ""
         echo "📝 Recent changes:"
         git log --oneline -3 | sed 's/^/   /'
-        restore_cron_jobs
+        if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
+        if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
     else
         echo "❌ Failed to restore checkpoint"
         exit 1
@@ -927,7 +1031,8 @@ if [ "$SELECTED_HASH" = "$CURRENT_SHORT" ]; then
     echo "✅ Already at this checkpoint"
     echo "   Commit: $SELECTED_HASH"
     echo "   Time: $(git log -1 --format=%cd --date=iso)"
-    restore_cron_jobs
+    if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
+    if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
     exit 0
 fi
 
@@ -942,7 +1047,8 @@ if [ "$SELECTED_INDEX" -eq 0 ]; then
         echo ""
         echo "📝 Recent changes:"
         git log --oneline -3 | sed 's/^/   /'
-        restore_cron_jobs
+        if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
+        if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
     else
         echo "❌ Failed to restore checkpoint"
         exit 1
@@ -960,5 +1066,6 @@ else
     echo "   ⚠️  You restored an older checkpoint."
     echo "   Your next 'checkpoint-backup' will overwrite newer remote checkpoints."
     echo "   To return to the latest, run 'checkpoint-restore' again."
-    restore_cron_jobs
+    if [ "$AGENTS_ONLY" = false ]; then restore_cron_jobs; fi
+    if [ "$WORKSPACE_ONLY" = false ]; then restore_agents; fi
 fi

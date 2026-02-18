@@ -5,6 +5,7 @@ set -e
 
 WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENTS_DIR="${HOME}/.openclaw/agents"
 
 clear
 echo "🚀 OpenClaw Checkpoint Setup"
@@ -31,6 +32,25 @@ else
     echo "   📝 Initializing workspace..."
     "$SCRIPT_DIR/checkpoint-init"
     HAS_REMOTE=false
+fi
+
+# Detect agents
+echo ""
+echo "🤖 Checking for agents..."
+if [ -d "$AGENTS_DIR" ]; then
+    SETUP_AGENTS=()
+    for d in "$AGENTS_DIR"/*/; do
+        [ -d "$d" ] && SETUP_AGENTS+=("$(basename "$d")")
+    done
+    if [ ${#SETUP_AGENTS[@]} -gt 0 ]; then
+        echo "   Found ${#SETUP_AGENTS[@]} agent(s): ${SETUP_AGENTS[*]}"
+        echo "   These will be included in your backups automatically."
+        echo "   (Use --workspace-only on backup/restore to skip agents)"
+    else
+        echo "   ℹ️  No agents found in ~/.openclaw/agents/"
+    fi
+else
+    echo "   ℹ️  No agents directory found (~/.openclaw/agents/)"
 fi
 
 # Step 2: Configure remote (if not done)

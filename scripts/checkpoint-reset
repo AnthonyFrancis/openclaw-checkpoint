@@ -4,6 +4,7 @@
 set -e
 
 WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+AGENTS_BACKUP_DIR="${WORKSPACE_DIR}/agents"
 
 echo "🔄 OpenClaw Checkpoint Reset"
 echo "=============================="
@@ -74,6 +75,27 @@ case "$RESET_CHOICE" in
         exit 1
         ;;
 esac
+
+# Offer to remove backed-up agent copies from workspace
+if [ -d "$AGENTS_BACKUP_DIR" ]; then
+    AGENT_COUNT=0
+    for d in "$AGENTS_BACKUP_DIR"/*/; do
+        [ -d "$d" ] && AGENT_COUNT=$((AGENT_COUNT + 1))
+    done
+    if [ "$AGENT_COUNT" -gt 0 ]; then
+        echo ""
+        echo "🤖 Found $AGENT_COUNT agent backup(s) in workspace agents/ folder."
+        echo "   (This does NOT affect your actual agents in ~/.openclaw/agents/)"
+        echo ""
+        read -p "   Remove agent backup copies from workspace? [y/N]: " REMOVE_AGENTS
+        if [[ "$REMOVE_AGENTS" =~ ^[Yy]$ ]]; then
+            rm -rf "$AGENTS_BACKUP_DIR"
+            echo "   ✅ Agent backups removed from workspace"
+        else
+            echo "   ⏭️  Keeping agent backups in workspace"
+        fi
+    fi
+fi
 
 echo ""
 echo "┌─────────────────────────────────────────────────────────┐"

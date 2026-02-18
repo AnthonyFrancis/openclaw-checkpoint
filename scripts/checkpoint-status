@@ -4,6 +4,8 @@
 set -e
 
 WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+AGENTS_DIR="${HOME}/.openclaw/agents"
+AGENTS_BACKUP_DIR="${WORKSPACE_DIR}/agents"
 
 cd "$WORKSPACE_DIR" || {
     echo "❌ Workspace not found at $WORKSPACE_DIR"
@@ -109,6 +111,57 @@ else
     else
         echo "   ❌ Not scheduled"
         echo "      Run: checkpoint-schedule hourly"
+    fi
+fi
+
+echo ""
+
+# Agent backup status
+echo "🤖 Agents:"
+BACKED_UP_AGENTS=()
+LOCAL_AGENTS=()
+
+# Check which agents are backed up in the repo
+if [ -d "$AGENTS_BACKUP_DIR" ]; then
+    for d in "$AGENTS_BACKUP_DIR"/*/; do
+        [ -d "$d" ] && BACKED_UP_AGENTS+=("$(basename "$d")")
+    done
+fi
+
+# Check which agents exist locally
+if [ -d "$AGENTS_DIR" ]; then
+    for d in "$AGENTS_DIR"/*/; do
+        [ -d "$d" ] && LOCAL_AGENTS+=("$(basename "$d")")
+    done
+fi
+
+if [ ${#BACKED_UP_AGENTS[@]} -eq 0 ] && [ ${#LOCAL_AGENTS[@]} -eq 0 ]; then
+    echo "   ℹ️  No agents found (local or backed up)"
+else
+    if [ ${#BACKED_UP_AGENTS[@]} -gt 0 ]; then
+        echo "   Backed up: ${BACKED_UP_AGENTS[*]}"
+    fi
+
+    # Find agents that exist locally but are NOT backed up
+    NOT_BACKED_UP=()
+    for local_agent in "${LOCAL_AGENTS[@]}"; do
+        found=false
+        for backed_agent in "${BACKED_UP_AGENTS[@]}"; do
+            if [ "$local_agent" = "$backed_agent" ]; then
+                found=true
+                break
+            fi
+        done
+        if [ "$found" = false ]; then
+            NOT_BACKED_UP+=("$local_agent")
+        fi
+    done
+
+    if [ ${#NOT_BACKED_UP[@]} -gt 0 ]; then
+        echo "   ⚠️  Not yet backed up: ${NOT_BACKED_UP[*]}"
+        echo "      Run: checkpoint-backup"
+    elif [ ${#LOCAL_AGENTS[@]} -gt 0 ]; then
+        echo "   ✅ All ${#LOCAL_AGENTS[@]} local agent(s) backed up"
     fi
 fi
 

@@ -1,23 +1,24 @@
 ---
 name: openclaw-checkpoint
-description: Backup and restore OpenClaw workspace state across machines using git. Enables disaster recovery by syncing SOUL.md, MEMORY.md, memory files, cron jobs, and configuration to a remote repository. Use when user wants to checkpoint their OpenClaw state, restore on a new machine, migrate between computers, or protect against data loss. Provides commands checkpoint (help overview), checkpoint-setup (interactive onboarding), checkpoint-backup, checkpoint-restore (with interactive checkpoint selection or --latest for most recent), checkpoint-schedule (auto-backup), checkpoint-stop, checkpoint-status, checkpoint-init, and checkpoint-reset. Automatically backs up cron jobs to memory/cron-jobs-backup.json on each checkpoint-backup.
+description: Backup and restore OpenClaw workspace state and agents across machines using git. Enables disaster recovery by syncing SOUL.md, MEMORY.md, memory files, cron jobs, agents (~/.openclaw/agents/), and configuration to a remote repository. Use when user wants to checkpoint their OpenClaw state, restore on a new machine, migrate between computers, or protect against data loss. Provides commands checkpoint (help overview), checkpoint-setup (interactive onboarding), checkpoint-backup, checkpoint-restore (with interactive checkpoint selection or --latest for most recent), checkpoint-schedule (auto-backup), checkpoint-stop, checkpoint-status, checkpoint-init, and checkpoint-reset. Supports multi-agent backup with flags --workspace-only, --agents-only, and --agent <name>. Automatically backs up cron jobs to memory/cron-jobs-backup.json on each checkpoint-backup.
 ---
 
 # OpenClaw Checkpoint Skill
 
-Backup and restore your OpenClaw identity, memory, and configuration across machines.
+Backup and restore your OpenClaw identity, memory, agents, and configuration across machines.
 
 **Platform:** macOS and Linux only. Windows is not supported.
 
 ## Overview
 
-This skill provides disaster recovery for OpenClaw by syncing your workspace to a git repository. It preserves:
+This skill provides disaster recovery for OpenClaw by syncing your workspace and agents to a git repository. It preserves:
 
 - **Identity**: SOUL.md, IDENTITY.md, USER.md (who you and the assistant are)
 - **Memory**: MEMORY.md and memory/*.md files (conversation history and context)
 - **Cron Jobs**: Scheduled tasks exported to memory/cron-jobs-backup.json (morning briefs, daily syncs, automations)
 - **Configuration**: TOOLS.md, AGENTS.md, HEARTBEAT.md (tool setups and conventions)
 - **Scripts**: Custom tools and automation you've built
+- **Agents**: All agent folders from ~/.openclaw/agents/ (alex, blake, etc.)
 
 **Not synced** (security): API keys (.env.*), credentials, OAuth tokens
 
@@ -76,6 +77,7 @@ checkpoint-setup
 - Guides you through creating a PRIVATE GitHub repository
 - Sets up SSH authentication (recommended) or Personal Access Token
 - Automatically detects if SSH key is already authorized on GitHub
+- Detects agents in `~/.openclaw/agents/` and reports they will be included in backups
 - Generates a README.md with recovery instructions and commands
 - Commits workspace files within `~/.openclaw/workspace` (secrets excluded via .gitignore)
 - Configures automatic backups
@@ -116,19 +118,35 @@ checkpoint-auth
 Save current state to remote repository.
 
 ```bash
-checkpoint-backup
+checkpoint-backup                     # Backup workspace + all agents
+checkpoint-backup --workspace-only    # Backup workspace only (skip agents)
+checkpoint-backup --agents-only       # Backup agents only (skip workspace/cron)
+checkpoint-backup --agent alex        # Backup only the 'alex' agent (+ workspace)
 ```
 
 **What it does:**
 - Backs up OpenClaw cron jobs to `memory/cron-jobs-backup.json` (requires `openclaw` CLI and running gateway)
+- Copies agent folders from `~/.openclaw/agents/` into `agents/` in the workspace repo (strips nested `.git` dirs)
 - Commits all changes in ~/.openclaw/workspace
 - Pushes to origin/main
 - Shows commit hash and timestamp
+
+**Agent backup details:**
+- Auto-detects agents in `~/.openclaw/agents/` (e.g., alex, blake)
+- Each agent folder is copied to `agents/<name>/` in the backup repo
+- Nested `.git` directories are removed to avoid submodule issues
+- If no agents exist, skips gracefully with an info message
+- Uses `rsync --exclude='.git'` when available, falls back to `cp -r` + manual `.git` removal
 
 **Cron job backup details:**
 - Runs `openclaw cron list --json` to export all scheduled tasks
 - Strips runtime state, keeps only configuration (name, schedule, target, payload)
 - Non-blocking: if the CLI or gateway is unavailable, checkpoint-backup continues without cron backup
+
+**Flags:**
+- `--workspace-only` — skip agent backup
+- `--agents-only` — skip workspace and cron backup, only back up agents
+- `--agent <name>` — back up a single named agent only
 
 **When to use:**
 - Before switching computers
@@ -169,6 +187,7 @@ checkpoint-status
 - Last backup time and commit
 - Whether local is behind remote
 - Uncommitted changes
+- Agent backup status (which agents are backed up, which are missing)
 - Auto-backup schedule status
 - Recent backup activity log
 
@@ -181,9 +200,12 @@ checkpoint-status
 Restore state from remote repository, with checkpoint selection and first-time onboarding.
 
 ```bash
-checkpoint-restore            # Select from recent checkpoints (interactive)
-checkpoint-restore --latest   # Restore most recent checkpoint (skip selection)
-checkpoint-restore --force    # Discard local changes before restoring
+checkpoint-restore                    # Select from recent checkpoints (interactive)
+checkpoint-restore --latest           # Restore most recent checkpoint (skip selection)
+checkpoint-restore --force            # Discard local changes before restoring
+checkpoint-restore --workspace-only   # Restore workspace only (skip agents)
+checkpoint-restore --agents-only      # Restore agents only (skip workspace/cron)
+checkpoint-restore --agent alex       # Restore only the 'alex' agent
 ```
 
 **What it does:**
@@ -194,6 +216,7 @@ checkpoint-restore --force    # Discard local changes before restoring
   - Handles merge/replace options if local files exist
   - Shows available checkpoints to pick from (if the repo has more than one commit)
   - Offers to restore cron jobs from backup
+  - Offers to restore agents from backup
 - **Returning users:** Shows a list of the 10 most recent checkpoints to choose from
   - Pick the latest or any older checkpoint to restore
   - Current checkpoint is marked in the list
@@ -204,6 +227,14 @@ checkpoint-restore --force    # Discard local changes before restoring
   2. Discard local changes and continue restoring
   3. Cancel
 - **Cron jobs:** Automatically offers to restore cron jobs from `memory/cron-jobs-backup.json` after restoring (requires OpenClaw gateway to be running)
+- **Agents:** Offers to restore agents from `agents/` directory in the backup to `~/.openclaw/agents/`
+
+**Flags:**
+- `--latest` — skip selection, restore most recent checkpoint
+- `--force` — discard local changes without prompting
+- `--workspace-only` — skip agent restore
+- `--agents-only` — skip workspace and cron restore, only restore agents
+- `--agent <name>` — restore a single named agent only
 
 **When to use:**
 - Starting OpenClaw on a new machine
@@ -243,7 +274,10 @@ checkpoint-reset
 **What it does:**
 - Option 1: Removes local git repository only (keeps SSH keys)
 - Option 2: Removes everything (git repo + SSH keys + GitHub from known_hosts)
+- Offers to remove backed-up agent copies from workspace `agents/` folder
 - Reminds you to delete the GitHub repo manually
+
+Note: Reset never touches your actual agent folders in `~/.openclaw/agents/` -- only the backup copies.
 
 **When to use:**
 - Starting over with a fresh setup
@@ -356,6 +390,66 @@ Shows:
 - Auto-backup schedule
 - Recent activity log
 
+## Multi-Agent Backup
+
+The checkpoint system automatically detects and backs up all agents from `~/.openclaw/agents/`.
+
+### How It Works
+
+- On **backup**: Agent folders are copied from `~/.openclaw/agents/` into `agents/` inside the backup repo, with nested `.git` directories stripped
+- On **restore**: Agent folders are copied from `agents/` in the backup repo back to `~/.openclaw/agents/`
+- If no agents exist, all commands skip agent handling gracefully
+
+### File Structure in Backup Repo
+
+```
+~/.openclaw/workspace/          (backup repo root)
+  SOUL.md
+  MEMORY.md
+  memory/
+  agents/                       (auto-created when agents exist)
+    alex/                       (copied from ~/.openclaw/agents/alex/)
+    blake/                      (copied from ~/.openclaw/agents/blake/)
+```
+
+### Agent Flags
+
+These flags work on `checkpoint-backup` and `checkpoint-restore`:
+
+| Flag | Description |
+|------|-------------|
+| `--workspace-only` | Skip agent backup/restore entirely |
+| `--agents-only` | Skip workspace and cron, only operate on agents |
+| `--agent <name>` | Operate on a single named agent only |
+
+### Examples
+
+```bash
+# Backup everything (default)
+checkpoint-backup
+
+# Backup only agents
+checkpoint-backup --agents-only
+
+# Backup only the 'alex' agent
+checkpoint-backup --agent alex
+
+# Restore workspace but skip agents
+checkpoint-restore --latest --workspace-only
+
+# Restore only agents from backup
+checkpoint-restore --agents-only
+
+# Check which agents are backed up
+checkpoint-status
+```
+
+### Backwards Compatibility
+
+- If `~/.openclaw/agents/` does not exist or is empty, all commands skip agent handling with an info message
+- Old backup repos without an `agents/` directory work fine -- restore simply skips agents
+- No existing behavior changes when no agents are present
+
 ### Manual Cron Setup (Advanced)
 
 If you prefer manual cron:
@@ -422,6 +516,7 @@ Your backup contains sensitive personal data:
 - ✅ Cron jobs (memory/cron-jobs-backup.json)
 - ✅ Scripts and tools
 - ✅ Configuration
+- ✅ Agents (~/.openclaw/agents/ -> agents/ in backup repo)
 
 **What does NOT get backed up:**
 - ❌ API keys (.env.*) — keep in 1Password
@@ -447,7 +542,7 @@ Auto-backup is **opt-in only** -- it is never enabled unless you explicitly run 
 
 The skill does **not** install any background daemons, system services, or root-level processes. All scheduling runs under your user account.
 
-**File access scope**: The skill only reads and writes within `~/.openclaw/workspace`. It does not access files outside this directory. Sensitive files (.env.*, credentials, OAuth tokens) are excluded from backups via .gitignore.
+**File access scope**: The skill reads from `~/.openclaw/workspace` and `~/.openclaw/agents/` (for multi-agent backup). It writes backup copies of agents into `~/.openclaw/workspace/agents/`. On restore, it copies agents back to `~/.openclaw/agents/`. Sensitive files (.env.*, credentials, OAuth tokens) are excluded from backups via .gitignore.
 
 ## Troubleshooting
 
@@ -492,6 +587,19 @@ cd ~/.openclaw/workspace && git add -A && git commit -m "Full backup" && git pus
 
 ### Starting fresh
 Run `checkpoint-reset` to remove local git repo and optionally SSH keys, then `checkpoint-setup`.
+
+### Agents not being backed up
+Check that your agents are in `~/.openclaw/agents/` (not somewhere else). Run `checkpoint-status` to see which agents are detected and which are backed up. Make sure you're not passing `--workspace-only`.
+
+### Agent has nested .git errors
+The backup process automatically strips `.git` directories from agent copies. If you see submodule warnings, run a fresh backup:
+```bash
+rm -rf ~/.openclaw/workspace/agents
+checkpoint-backup
+```
+
+### Restored agents missing files
+Agent restore copies the backup as-is. If the backup was taken before certain files were added to the agent, those files won't be present. Run `checkpoint-backup` on the source machine first to capture the latest state.
 
 ## Limitations
 

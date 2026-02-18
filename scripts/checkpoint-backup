@@ -7,6 +7,36 @@ WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
 REMOTE_URL="${CHECKPOINT_REMOTE:-origin}"
 BRANCH="${CHECKPOINT_BRANCH:-main}"
 LOCK_DIR="$WORKSPACE_DIR/.git/checkpoint.lock"
+AGENTS_DIR="${HOME}/.openclaw/agents"
+AGENTS_BACKUP_DIR="${WORKSPACE_DIR}/agents"
+
+# ===========================================================================
+# FLAG PARSING
+# ===========================================================================
+WORKSPACE_ONLY=false
+AGENTS_ONLY=false
+SINGLE_AGENT=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --workspace-only) WORKSPACE_ONLY=true; shift ;;
+        --agents-only) AGENTS_ONLY=true; shift ;;
+        --agent)
+            if [ -n "${2:-}" ]; then
+                SINGLE_AGENT="$2"; shift 2
+            else
+                echo "❌ --agent requires a name argument"
+                exit 1
+            fi
+            ;;
+        *) shift ;;
+    esac
+done
+
+if [ "$WORKSPACE_ONLY" = true ] && [ "$AGENTS_ONLY" = true ]; then
+    echo "❌ Cannot use --workspace-only and --agents-only together"
+    exit 1
+fi
 
 cd "$WORKSPACE_DIR" || {
     echo "❌ Workspace not found at $WORKSPACE_DIR"
@@ -97,8 +127,69 @@ PYTHON_EOF
     rm -f "$TEMP_BACKUP"
 }
 
-# Backup cron jobs before committing
-backup_cron_jobs
+# ===========================================================================
+# AGENT BACKUP
+# Copy agent folders from ~/.openclaw/agents/ into workspace agents/ dir
+# ===========================================================================
+backup_agents() {
+    if [ ! -d "$AGENTS_DIR" ]; then
+        echo "   ℹ️  No agents directory found (~/.openclaw/agents/) — skipping agent backup"
+        return 0
+    fi
+
+    # Build list of agents to back up
+    local agents=()
+    if [ -n "$SINGLE_AGENT" ]; then
+        if [ -d "$AGENTS_DIR/$SINGLE_AGENT" ]; then
+            agents=("$SINGLE_AGENT")
+        else
+            echo "   ❌ Agent '$SINGLE_AGENT' not found in $AGENTS_DIR"
+            return 1
+        fi
+    else
+        for d in "$AGENTS_DIR"/*/; do
+            [ -d "$d" ] && agents+=("$(basename "$d")")
+        done
+    fi
+
+    if [ ${#agents[@]} -eq 0 ]; then
+        echo "   ℹ️  No agents found in ~/.openclaw/agents/ — skipping agent backup"
+        return 0
+    fi
+
+    echo "🤖 Backing up ${#agents[@]} agent(s)..."
+    mkdir -p "$AGENTS_BACKUP_DIR"
+
+    for agent in "${agents[@]}"; do
+        local src="$AGENTS_DIR/$agent"
+        local dest="$AGENTS_BACKUP_DIR/$agent"
+
+        echo "   • $agent..."
+
+        if command -v rsync >/dev/null 2>&1; then
+            rsync -a --exclude='.git' "$src/" "$dest/"
+        else
+            # Fallback: cp then strip .git dirs
+            mkdir -p "$dest"
+            cp -r "$src/." "$dest/"
+            find "$dest" -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
+        fi
+
+        echo "     ✅ $agent backed up"
+    done
+
+    echo "   ✅ Agent backup complete"
+}
+
+# Backup cron jobs before committing (skip if --agents-only)
+if [ "$AGENTS_ONLY" = false ]; then
+    backup_cron_jobs
+fi
+
+# Backup agents (skip if --workspace-only)
+if [ "$WORKSPACE_ONLY" = false ]; then
+    backup_agents
+fi
 
 # Prevent concurrent runs using mkdir (atomic on all platforms)
 cleanup_lock() {

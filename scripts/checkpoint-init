@@ -53,6 +53,13 @@ logs/
 *.swo
 *~
 
+# Dependencies and build artifacts
+node_modules/
+.next/
+dist/
+build/
+*.node
+
 # Generated data - sync via API
 memory/google-tasks.json
 memory/stripe-data.json
