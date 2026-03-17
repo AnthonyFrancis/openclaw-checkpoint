@@ -201,3 +201,4 @@ This is a community skill for [OpenClaw](https://github.com/openclaw/openclaw), 
 ## License
 
 MIT
+# openclaw-checkpoint
